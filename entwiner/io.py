@@ -14,7 +14,7 @@ def feature_generator(path):
         # Use GeoJSON reader
         return read_geojson(path)
     else:
-        raise InvalidFormatError
+        raise InvalidFormatError("{} not recognized as valid input format".format(path))
 
 
 def read_geojson(path):
