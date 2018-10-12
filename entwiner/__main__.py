@@ -11,10 +11,11 @@ from . import database, io
 def entwiner(infiles, outfile):
     click.echo("Creating database!")
     db = database.EdgeDB(outfile)
+    db.stage()
 
     click.echo("Importing edges...")
     # Create progress bar(s)
-    BATCH_SIZE = 100
+    BATCH_SIZE = 1000
     for path in infiles:
         feature_gen = io.feature_generator(path)
         features = []
