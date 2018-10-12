@@ -224,6 +224,10 @@ class EdgeDB:
     def is_directed(self):
         return True
 
+    def is_multigraph(self):
+        # TODO: make proper classes mirroring all of networkx's implementations
+        return False
+
     def _sqlite_type(self, value):
         if type(value) == int:
             return "integer"

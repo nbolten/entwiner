@@ -20,5 +20,6 @@ t0 = time.time()
 print(7884 in db)
 
 cost_fun = lambda u, v, d: d.get('length', 0)
-nx.algorithms.shortest_paths.weighted._dijkstra_multisource(db, [7884], cost_fun)
+# nx.algorithms.shortest_paths.weighted._dijkstra_multisource(db, [7884], cost_fun)
+nx.algorithms.shortest_paths.dijkstra_path(db, 7884, 666, 'length')
 print(time.time() - t0)
