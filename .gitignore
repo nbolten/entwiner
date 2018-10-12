@@ -1,4 +1,7 @@
+# Python stuff
+__pycache__
 venv
 
+# Database stuff
 *.db
 *.db.tmp
