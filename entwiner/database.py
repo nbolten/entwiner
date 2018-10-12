@@ -24,12 +24,12 @@ class EdgeDB:
 
     def stage(self):
         """Creates a temporary database if one doesn't already exist."""
+        if self.database != ":memory:":
+            self.database += ".tmp"
+
         # Delete temporary db if it exists.
         if os.path.exists(self.database):
             os.remove(self.database)
-
-        if self.database != ":memory:":
-            self.database += ".tmp"
 
         self.conn = sqlite3.connect(self.database)
 
@@ -46,39 +46,38 @@ class EdgeDB:
         """
         # See if we need to create any new columns based on the input data.
         cursor = self.conn.cursor()
-        cols = [c[1] for c in cursor.execute("PRAGMA table_info(edges)")]
-        cols_set = set(cols)
+        colnames = self.columns()
+        cols_set = set(colnames)
 
         for feature in features:
             for key in feature['properties'].keys():
                 if key not in cols_set:
                     col_type = self._sqlite_type(feature['properties'][key])
                     cursor.execute("ALTER TABLE edges ADD COLUMN {} {}".format(key, col_type))
-                    cols.append(key)
+                    colnames.append(key)
                     cols_set.add(key)
 
         def get_or_fetch_node(feature, index):
             coords = feature["geometry"]["coordinates"][index]
             x, y = [round(c, PRECISION) for c in coords]
-            rows = cursor.execute("SELECT rowid FROM nodes WHERE x = ? AND y = ?", (x, y))
-            row = rows.fetchone()
-            if not row:
+            node = self.node_by_xy(x, y)
+            if node is None:
                 cursor.execute("INSERT INTO nodes VALUES (?, ?)", (x, y))
-                return cursor.execute("SELECT rowid FROM nodes WHERE x = ? AND y = ?", (x, y)).fetchone()[0]
+                return self.node_by_xy(x, y)
             else:
-                return row[0]
+                return node
 
         # Update the table
         inserts = []
         for feature in features:
-            values = [feature["properties"].get(c, None) for c in cols]
+            values = [feature["properties"].get(c, None) for c in colnames]
             u = get_or_fetch_node(feature, 0)
             v = get_or_fetch_node(feature, -1)
             values[0] = u
             values[1] = v
             inserts.append(values)
 
-        paramstring = ", ".join("?" for i in range(len(cols)))
+        paramstring = ", ".join("?" for i in range(len(colnames)))
         template = "INSERT INTO edges VALUES ({})".format(paramstring)
         cursor.executemany(template, inserts)
         self.conn.commit()
@@ -88,6 +87,55 @@ class EdgeDB:
             new_database = self.database[:-4]
             os.rename(self.database, new_database)
             self.database = new_database
+
+    def node_by_id(self, node_id):
+        """Get a node from the database."""
+        cursor = self.conn.cursor()
+        row = cursor.execute("SELECT x, y FROM nodes WHERE rowid = ?", (node_id,)).fetchone()
+        if not row:
+            # FIXME: Raise a ValueError-ish custom Exception?
+            return None
+        else:
+            return { "x": row[0], "y": row[1] }
+
+    def node_by_xy(self, x, y):
+        """Get a node from the database."""
+        cursor = self.conn.cursor()
+        row = cursor.execute("SELECT rowid FROM nodes WHERE x = ? AND y = ?", (x, y)).fetchone()
+        if not row:
+            # FIXME: Raise a ValueError-ish custom Exception?
+            return None
+        else:
+            return row[0]
+
+    def edges_by_nodes(self, u, v=None, columns=None):
+        if columns is None:
+            columns = self.columns()
+            query_cols = "*"
+        else:
+            query_cols = ", ".join(columns)
+
+        cursor = self.conn.cursor()
+        if v is None:
+            template = "SELECT {} FROM edges WHERE u = ?".format(query_cols)
+            query = cursor.execute(template, (u,))
+        else:
+            template = "SELECT {} FROM edges WHERE u = ? AND v = ?".format(query_cols)
+            query = cursor.execute(template, (u, v))
+
+        rows = []
+        for row in query:
+            data = {}
+            for c, value in zip(query_cols, row):
+                if value is not None:
+                    data[c] = value
+            rows.append(data)
+
+        return rows
+
+    def columns(self):
+        cursor = self.conn.cursor()
+        return [c[1] for c in cursor.execute("PRAGMA table_info(edges)")]
 
     def shortest_path(self, sources, cost_fun=costs.shortest_path, cutoff=None, target=None):
         """
@@ -113,37 +161,22 @@ class EdgeDB:
         # Retrieve database column names
         cursor = self.conn.cursor()
         ignore = ["id", "geometry", "u"]
-        colnames = [c[1] for c in cursor.execute("PRAGMA table_info(edges)") if c not in ignore]
+        colnames = [c for c in self.columns() if c not in ignore]
 
         def adj_nodes(u):
             # The first part of the result is the node ID, rest is edge attr
             neighbors = []
 
-            # TODO: the SQL queries take up ~40% of runtime for large-ish traversals (whole
-            # graph of 75k pahs), with 50% of that taken up by the execute_sql line and 25%
-            # taken up by iterating over the cursor. Two ideas for speeding this up:
-            # 1) Find a way to more rapidly get all of the rows without the iterator - we just
-            #    want all of it at once. fetchall() does not make anything faster.
-            # 2) The check for whether a node has already been visited happens after the SQL
-            #    query and after coercing to dict. Any reasonable way to restrict query to
-            #    only 'unseen' nodes (note that 'seen' list grows massively, has heavy i/o
-            #    burden).
             colreplace = ', '.join(colnames)
-            query = 'SELECT {} FROM edges WHERE u = ?'.format(colreplace)
-            cursor = self.conn.execute(query, (u,))
-
-            for row in cursor:
-                data = {}
-                for colname, value in zip(colnames, row):
-                    if value is not None:
-                        data[colname] = value
-                v = int(data.pop('v'))
-                neighbors.append((v, data))
-
-            return neighbors
+            neighbors = self.edges_by_nodes(u, columns=colnames)
+            pairs = []
+            for neighbor in neighbors:
+                v = int(neighbor.pop('v'))
+                pairs.append((v, neighbor))
+            return pairs
 
         # FIXME: the following used to be wrapped in a db.atomic() context. Find
-        # sqlite3 raw equivalent
+        # sqlite3 raw equivalent?
 
         push = heappush
         pop = heappop
