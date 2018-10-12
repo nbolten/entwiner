@@ -4,7 +4,7 @@ import networkx as nx
 
 from entwiner import database
 
-db = database.EdgeDB('sup.db')
+db = database.DiGraphDB('sup.db')
 
 # print(db.columns())
 #
@@ -23,3 +23,7 @@ cost_fun = lambda u, v, d: d.get('length', 0)
 # nx.algorithms.shortest_paths.weighted._dijkstra_multisource(db, [7884], cost_fun)
 nx.algorithms.shortest_paths.dijkstra_path(db, 7884, 666, 'length')
 print(time.time() - t0)
+
+# print(nx.algorithms.centrality.degree_centrality(db))
+# deg = db.degree()
+# print(next(deg))

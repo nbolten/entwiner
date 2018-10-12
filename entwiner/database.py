@@ -1,4 +1,5 @@
 """Database management functions."""
+from copy import deepcopy
 from heapq import heappop, heappush
 from itertools import count
 import os
@@ -10,7 +11,7 @@ from . import costs
 PRECISION = 6
 
 
-class EdgeDB:
+class DiGraphDB:
     """Container for managing features as edges in an sqlite3 database.
 
     :param database: An sqlite3-compatible database string: a file path or :memory:.
@@ -22,7 +23,7 @@ class EdgeDB:
         # TODO: most models acquire a connection with every call - consider this
         self.conn = sqlite3.connect(self.database)
 
-        # Extract successors - networkx-like interface
+        # networkx-like interfaces
         self._succ = self
 
     def stage(self):
@@ -73,12 +74,13 @@ class EdgeDB:
         # Update the table
         inserts = []
         for feature in features:
-            values = [feature["properties"].get(c, None) for c in colnames]
+            values = [feature["properties"].get(c, None) for c in colnames][2:]
             u = get_or_fetch_node(feature, 0)
             v = get_or_fetch_node(feature, -1)
-            values[0] = u
-            values[1] = v
-            inserts.append(values)
+
+            inserts.append([u, v] + values)
+            # TODO: reverse certain user-defined column types (e.g. incline)
+            inserts.append([v, u] + values)
 
         paramstring = ", ".join("?" for i in range(len(colnames)))
         template = "INSERT INTO edges VALUES ({})".format(paramstring)
@@ -126,14 +128,7 @@ class EdgeDB:
             template = "SELECT {} FROM edges WHERE u = ? AND v = ?".format(query_cols)
             query = cursor.execute(template, (u, v))
 
-        rows = []
-        for row in query:
-            data = {}
-            for c, value in zip(columns, row):
-                if value is not None:
-                    data[c] = value
-            rows.append(data)
-
+        rows = [self._row_as_dict(row, columns) for row in query]
         return rows
 
     def columns(self):
@@ -154,6 +149,7 @@ class EdgeDB:
         :type target: int
 
         """
+        # FIXME: remove this. This class is now compatible w/ nx algos
         # Dijkstra's algorithm. TODO: make swappable shortest path implementations
         paths = {}
         pred = {}
@@ -221,20 +217,52 @@ class EdgeDB:
 
         return dist
 
-    def is_directed(self):
-        return True
-
-    def is_multigraph(self):
-        # TODO: make proper classes mirroring all of networkx's implementations
-        return False
-
-    def _sqlite_type(self, value):
+    @staticmethod
+    def _sqlite_type(value):
         if type(value) == int:
             return "integer"
         elif type(value) == float:
             return "real"
         else:
             return "text"
+
+    def _row_as_dict(self, row, columns=None):
+        # TODO: make this safer? The row might not have SELECT * in it.
+        if columns is None:
+            columns = self.columns()
+        data = {}
+        for c, value in zip(columns, row):
+            if value is not None:
+                data[c] = value
+        return data
+
+    # networkx compatibility methods
+    def degree(self):
+        cursor = self.conn.cursor()
+        query = cursor.execute("""
+            SELECT u, q1.count + q2.count count
+              FROM (  SELECT u, count(*) count
+                        FROM edges e
+                        JOIN nodes n
+                          ON e.u = n.rowid
+                    GROUP BY u) q1
+              JOIN (  SELECT v, count(*) count
+                        FROM edges e
+                        JOIN nodes n
+                          ON e.v = n.rowid
+                    GROUP BY v) q2
+                ON q1.u = q2.v
+        """)
+        # TODO: implement the rest of the interface - this just supports iteration,
+        # whereas networkx supplies DiDegreeView implementing __getitem__ as well.
+        return query
+
+    def is_directed(self):
+        return True
+
+    def is_multigraph(self):
+        # TODO: make proper classes mirroring all of networkx's implementations
+        return False
 
     def __getitem__(self, key):
         if isinstance(key , int):
@@ -252,3 +280,7 @@ class EdgeDB:
         except ValueError:
             return False
         return True
+
+    def __len__(self):
+        cursor = self.conn.cursor()
+        return cursor.execute("SELECT count(rowid) FROM nodes").fetchone()[0]

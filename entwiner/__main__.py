@@ -10,7 +10,7 @@ from . import database, io
 @click.argument("outfile")
 def entwiner(infiles, outfile):
     click.echo("Creating database!")
-    db = database.EdgeDB(outfile)
+    db = database.DiGraphDB(outfile)
     db.stage()
 
     click.echo("Importing edges...")
