@@ -22,6 +22,9 @@ class EdgeDB:
         # TODO: most models acquire a connection with every call - consider this
         self.conn = sqlite3.connect(self.database)
 
+        # Extract successors - networkx-like interface
+        self._succ = self
+
     def stage(self):
         """Creates a temporary database if one doesn't already exist."""
         if self.database != ":memory:":
@@ -126,7 +129,7 @@ class EdgeDB:
         rows = []
         for row in query:
             data = {}
-            for c, value in zip(query_cols, row):
+            for c, value in zip(columns, row):
                 if value is not None:
                     data[c] = value
             rows.append(data)
@@ -163,18 +166,6 @@ class EdgeDB:
         ignore = ["id", "geometry", "u"]
         colnames = [c for c in self.columns() if c not in ignore]
 
-        def adj_nodes(u):
-            # The first part of the result is the node ID, rest is edge attr
-            neighbors = []
-
-            colreplace = ', '.join(colnames)
-            neighbors = self.edges_by_nodes(u, columns=colnames)
-            pairs = []
-            for neighbor in neighbors:
-                v = int(neighbor.pop('v'))
-                pairs.append((v, neighbor))
-            return pairs
-
         # FIXME: the following used to be wrapped in a db.atomic() context. Find
         # sqlite3 raw equivalent?
 
@@ -196,7 +187,7 @@ class EdgeDB:
             dist[v] = d
             if v == target:
                 break
-            for u, e in adj_nodes(v):
+            for u, e in self[v].items():
                 cost = cost_fun(v, u, e)
                 if cost is None:
                     continue
@@ -230,6 +221,9 @@ class EdgeDB:
 
         return dist
 
+    def is_directed(self):
+        return True
+
     def _sqlite_type(self, value):
         if type(value) == int:
             return "integer"
@@ -237,3 +231,20 @@ class EdgeDB:
             return "real"
         else:
             return "text"
+
+    def __getitem__(self, key):
+        if isinstance(key , int):
+            successors = {}
+            for row in self.edges_by_nodes(key):
+                v = row.pop('v')
+                successors[v] = row
+            return successors
+        else:
+            raise ValueError("Only integer lookups supported.")
+
+    def __contains__(self, item):
+        try:
+            self[item]
+        except ValueError:
+            return False
+        return True
