@@ -25,6 +25,8 @@ def entwiner(infiles, outfile):
             try:
                 feature = next(feature_gen)
             except StopIteration as e:
+                if features:
+                    db.add_edges(features)
                 break
 
             if n == BATCH_SIZE:

@@ -24,6 +24,8 @@ cost_fun = lambda u, v, d: d.get('length', 0)
 nx.algorithms.shortest_paths.dijkstra_path(db, 7884, 666, 'length')
 print(time.time() - t0)
 
+print(db[7884][666])
+
 # print(nx.algorithms.centrality.degree_centrality(db))
 # deg = db.degree()
 # print(next(deg))
