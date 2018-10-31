@@ -1,4 +1,4 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 
 setup(
     name="entwiner",
@@ -8,6 +8,7 @@ setup(
         "Click",
         "pyproj",
     ],
+    packages=find_packages(),
     entry_points="""
         [console_scripts]
         entwiner=entwiner.__main__:entwiner
