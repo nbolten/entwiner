@@ -1,7 +1,7 @@
 def sqlite_type(value):
     if type(value) == int:
-        return "integer"
+        return "INTEGER"
     elif type(value) == float:
-        return "real"
+        return "REAL"
     else:
-        return "text"
+        return "TEXT"

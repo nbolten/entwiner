@@ -47,6 +47,7 @@ def add_node(conn, key, value):
         if k not in columns:
             col_type = sqlite_type(feature['properties'][key])
             cursor.execute("ALTER TABLE nodes ADD COLUMN {} {}".format(key, col_type))
+            conn.commit()
             sql_set.append("{}={}".format(k, v))
 
         keys.append(k)
@@ -58,6 +59,7 @@ def add_node(conn, key, value):
     template = "INSERT INTO nodes ({}) VALUES ({})"
     sql = template.format(", ".join(keys), ", ".join(values))
     cursor.execute(sql)
+    conn.commit()
 
 
 def update_node(conn, key, value):
@@ -72,6 +74,7 @@ def update_node(conn, key, value):
         if k not in columns:
             col_type = sqlite_type(v)
             cursor.execute("ALTER TABLE nodes ADD COLUMN {} {}".format(key, col_type))
+            conn.commit()
             sql_set.append("{}={}".format(k, v))
 
         keys.append(k)
@@ -81,6 +84,7 @@ def update_node(conn, key, value):
     assignments = ["{} = {}".format(k, v) for k, v in zip(keys, values)]
     sql = template.format(", ".join(assignments))
     cursor.execute(sql, (key,))
+    conn.commit()
 
 
 def get_edge(conn, u, v):
@@ -94,9 +98,9 @@ def get_edge(conn, u, v):
     return data
 
 
-def add_edge(conn, u, v, value, succ=False):
+def add_edge(conn, _u, _v, value, succ=False):
     if succ:
-        u, v = v, u
+        _u, _v = _v, _u
     cursor = conn.cursor()
     columns = [c[1] for c in cursor.execute("PRAGMA table_info(edges)")]
 
@@ -106,16 +110,20 @@ def add_edge(conn, u, v, value, succ=False):
         if k not in columns:
             col_type = sqlite_type(v)
             cursor.execute("ALTER TABLE edges ADD COLUMN {} {}".format(k, col_type))
+            conn.commit()
 
         keys.append(k)
         values.append(v)
 
     keys = ["_u", "_v"] + [str(k) for k in keys]
-    values = [str(u), str(v)] + [str(val) for val in values]
+    values = [str(_u), str(_v)] + [str(val) for val in values]
 
     template = "INSERT INTO edges ({}) VALUES ({})"
-    sql = template.format(", ".join(keys), ", ".join(values))
-    cursor.execute(sql)
+    cols_str = ", ".join(keys)
+    values_str = ", ".join(["?" for v in values])
+    template = template.format(cols_str, values_str)
+    cursor.execute(template, values)
+    conn.commit()
 
 
 def update_edge(conn, u, v, value, succ=False):
@@ -129,20 +137,20 @@ def update_edge(conn, u, v, value, succ=False):
         values = []
         for k, val in value.items():
             if k not in columns:
-                col_type = sqlite_type(v)
+                col_type = sqlite_type(val)
                 cursor.execute("ALTER TABLE edges ADD COLUMN {} {}".format(k, col_type))
+                conn.commit()
 
             keys.append(k)
             values.append(val)
 
         template = "UPDATE edges SET {} WHERE _u = ? AND _v = ?"
-        assignments = ["{} = ?".format(k, val) for k, val in zip(keys, values)]
+        assignments = ["{} = ?".format(k) for k in keys]
         sql = template.format(", ".join(assignments))
         values.append(u)
         values.append(v)
-        print(sql)
-        print(values)
         cursor.execute(sql, values)
+        conn.commit()
 
 
 # node_dict_factory_factory: creates node_dict_factories that know about the db
@@ -216,18 +224,30 @@ class EdgeAttr:
             u, v = v, u
         self.u = u
         self.v = v
+        self.delayed_attr = {}
 
     def items(self):
         return get_edge(self.conn, self.u, self.v).items()
 
     def update(self, attr):
-        update_edge(self.conn, self.u, self.v, attr)
+        if self.u is not None and self.v is not None:
+            update_edge(self.conn, self.u, self.v, attr)
+        else:
+            self.delayed_attr.update(attr)
+
+    def commit_attrs(self):
+        if self.delayed_attr:
+            if self.u is not None and self.v is not None:
+                update_edge(self.conn, self.u, self.v, self.delayed_attr)
+            else:
+                # TODO: make into separate error class
+                raise Exception("Can't commit attrs to edge without u and v.")
 
     def __getitem__(self, key):
         return get_edge(self.conn, self.u, self.v)[key]
 
     def __setitem__(self, key, value):
-        update_edge(self.conn, self.u, self.v, value)
+        self.update({ key: value })
 
     def __bool__(self):
         if get_edge(self.conn, self.u, self.v):
@@ -262,7 +282,16 @@ class InnerAdjlist:
             return defaults
 
     def __getitem__(self, key):
-        return EdgeAttr(self.conn, u=self.u, v=key, succ=self.succ)
+        cursor = self.conn.cursor()
+        if self.succ:
+            query = cursor.execute("SELECT * FROM edges WHERE _u = ? AND _v = ?", (self.u, key))
+        else:
+            query = cursor.execute("SELECT * FROM edges WHERE _u = ? AND _v = ?", (key, self.u))
+
+        if query.fetchone():
+            return EdgeAttr(self.conn, u=self.u, v=key, succ=self.succ)
+        else:
+            raise KeyError
 
     def __contains__(self, key):
         cursor = self.conn.cursor()
@@ -439,6 +468,7 @@ def digraphdb(database, recreate=False):
             CREATE TABLE edges (_u integer, _v integer, UNIQUE(_u, _v));
             CREATE TABLE nodes (_key, UNIQUE(_key));
         """)
+        conn.commit()
 
     def __init__(self, *arg, **kwarg):
         super(*arg, **kwarg)
@@ -449,5 +479,6 @@ def digraphdb(database, recreate=False):
         "node_dict_factory": staticmethod(node_dict_factory_factory(conn)),
         "adjlist_outer_dict_factory": staticmethod(adjlist_outer_dict_factory_factory(conn)),
         "adjlist_inner_dict_factory": staticmethod(adjlist_inner_dict_factory_factory(conn)),
-        "edge_attr_dict_factory": staticmethod(edge_attr_dict_factory_factory(conn)),
+        # "edge_attr_dict_factory": staticmethod(edge_attr_dict_factory_factory(conn)),
+        "edge_attr_dict_factory": dict,
     })()
