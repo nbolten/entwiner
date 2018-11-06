@@ -5,8 +5,20 @@ import json
 from . import crs
 
 
+PRECISION = 7
+
+
 class InvalidFormatError(ValueError):
     """Entwine was not able to read this format."""
+
+
+def edge_generator(feature_gen):
+    def get_node(feature, index):
+        coords = feature["geometry"]["coordinates"][index]
+        point = [str(round(c, PRECISION)) for c in coords]
+        return ", ".join(point)
+
+    return ((get_node(f, 0), get_node(f, -1), f['properties']) for f in feature_gen)
 
 
 def feature_generator(path):
@@ -25,7 +37,4 @@ def read_geojson(path):
 
     # Convert to lon-lat
     # TODO: extract CRS from GeoJSON or assume it's already lon-lat
-    # FIXME: re-enable once CRS can be extracted from GeoJSON
-    # for feature in geojson['features']:
-    #     feature['geometry']['coordinates'] = crs.project(feature['geometry']['coordinates'])
     return iter(geojson['features'])

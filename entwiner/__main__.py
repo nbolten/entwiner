@@ -2,7 +2,7 @@
 
 import click
 
-from . import database, io
+from . import database, graphs, io
 
 
 @click.command()
@@ -10,35 +10,20 @@ from . import database, io
 @click.argument("outfile")
 def entwiner(infiles, outfile):
     click.echo("Creating database!")
-    db = database.DiGraphDB(outfile)
-    db.stage()
+    G = graphs.digraphdb.digraphdb(outfile, recreate=True)
 
     click.echo("Importing edges...")
     # Create progress bar(s)
     BATCH_SIZE = 1000
     for path in infiles:
         feature_gen = io.feature_generator(path)
-        features = []
-        n = 0
-        tot = 1
-        while True:
-            try:
-                feature = next(feature_gen)
-            except StopIteration as e:
-                if features:
-                    db.add_edges(features)
-                break
+        edge_gen = io.edge_generator(feature_gen)
+        G.add_edges_from(edge_gen)
 
-            if n == BATCH_SIZE:
-                db.add_edges(features)
-                features = []
-                n = 0
-                tot += BATCH_SIZE
-            else:
-                features.append(feature)
-                n += 1
-
-    db.finalize()
+        # TODO: do this without redundant i/o
+        feature_gen_rev = io.feature_generator(path)
+        edge_gen_rev = ((e[1], e[0], e[2]) for e in io.edge_generator(feature_gen_rev))
+        G.add_edges_from(edge_gen_rev)
 
     click.echo("Done!")
 

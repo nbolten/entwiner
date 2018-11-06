@@ -2,30 +2,35 @@ import time
 
 import networkx as nx
 
-from entwiner import database
+from entwiner import database, graphs
 
-db = database.DiGraphDB('sup.db')
+START = '-122.5049849, 48.7798528'
+END = '-122.5091418, 48.7789324'
 
-# print(db.columns())
-#
+G = graphs.digraphdb.digraphdb('sup.db')
+
+
 t0 = time.time()
-# path = db.shortest_path([1000])
-# # print(path)
-# print(len(path))
 
-# print(db.edges_by_nodes(7884, 666))
+# cost_fun = lambda u, v, d: d.get('length', 0)
+x = nx.algorithms.shortest_paths.dijkstra_path(G, START, END, 'length')
+print(x)
+print(list(G[END].items()))
+# print(time.time() - t0)
+# print([(k, d) for k, d in G._succ[START].items()])
 
-# print(db[7884])
-
-print(7884 in db)
-
-cost_fun = lambda u, v, d: d.get('length', 0)
-# nx.algorithms.shortest_paths.weighted._dijkstra_multisource(db, [7884], cost_fun)
-nx.algorithms.shortest_paths.dijkstra_path(db, 7884, 666, 'length')
-print(time.time() - t0)
-
-print(db[7884][666])
+# for k, v in G[START].items():
+#     print(k)
+#     print(v)
+#     print({k1: v1 for k1, v1 in v.items()})
+#     print('x')
 
 # print(nx.algorithms.centrality.degree_centrality(db))
-# deg = db.degree()
-# print(next(deg))
+# deg = G.degree()
+# nx.algorithms.all_pairs_node_connectivity(G)
+
+# print('Importing graph')
+print(len(G))
+G2 = nx.DiGraph(G)
+
+
