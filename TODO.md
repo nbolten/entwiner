@@ -8,6 +8,16 @@ graph theoretic analysis, like finding shortest paths.
 Entwiner works with modular routing engines that can use its SQLite data format, and
 ships with a Python-based one for use in research.
 
+# Bugs / Design
+
+## Separate workflow for database creation
+
+Right now, specifying a database path that doesn't yet exist results in the creation of
+an SQLite table there. We should have separate workflows for accessing an existing
+'graph' database vs. creating a new one so that people don't accidentally create new
+databases and so that we can catch bad paths when attempting to connect to an existing
+one. Example API: digraphdb.create() and digraphdb.connect().
+
 
 # Ideas
 

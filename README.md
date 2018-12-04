@@ -56,8 +56,9 @@ shortest-path algorithms and centrality metrics. Example:
     import entwiner as ent
     import networkx as nx
 
-    G = ent.database.DiGraphDB('test.db')
-    path = nx.algorithms.shortest_paths.dijkstra_path(G, 754, 9381, 'length')
+    G = ent.graphs.digraphdb.digraphdb('test.db')
+    path = nx.algorithms.shortest_paths.dijkstra_path(G, '-122.5049849, 48.7798528', '-122.5074134, 48.7798173', 'length')
+    print(path)
 
 ## Why SQLite?
 
