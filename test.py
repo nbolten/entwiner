@@ -31,6 +31,9 @@ print(list(G[END].items()))
 
 # print('Importing graph')
 print(len(G))
-G2 = nx.DiGraph(G)
 
+# @profile
+# def to_nx(G):
+#     return nx.DiGraph(G)
 
+# G2 = to_nx(G)

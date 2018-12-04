@@ -19,6 +19,8 @@ the data types for node references. Aside from being cool (much larger graphs wi
 NetworkX), this would also make all of the algorithms implemented for NetworkX
 available for entwiner
 
+## Spatialite - optional
+
 ## Pluggable non-Python routing engines
 
 Python is great for lots of things, but is not particularly fast for implementing
