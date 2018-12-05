@@ -1,7 +1,9 @@
 """Wraps various readers/writers for different geospatial formats with a focus on
 low-memory reading."""
-
 import json
+
+from shapely import geometry
+
 from . import crs
 
 
@@ -9,7 +11,7 @@ PRECISION = 7
 
 
 class InvalidFormatError(ValueError):
-    """Entwine was not able to read this format."""
+    """Entwiner was not able to read this format."""
 
 
 def edge_generator(feature_gen):
@@ -18,7 +20,12 @@ def edge_generator(feature_gen):
         point = [str(round(c, PRECISION)) for c in coords]
         return ", ".join(point)
 
-    return ((get_node(f, 0), get_node(f, -1), f['properties']) for f in feature_gen)
+    def generate_attribs(feature):
+        attrib = feature["properties"]
+        attrib["_geometry"] = geometry.shape(feature["geometry"]).wkt
+        return attrib
+
+    return ((get_node(f, 0), get_node(f, -1), generate_attribs(f)) for f in feature_gen)
 
 
 def feature_generator(path):
@@ -37,4 +44,4 @@ def read_geojson(path):
 
     # Convert to lon-lat
     # TODO: extract CRS from GeoJSON or assume it's already lon-lat
-    return iter(geojson['features'])
+    return iter(geojson["features"])

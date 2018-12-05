@@ -4,7 +4,6 @@ import sqlite3
 import networkx as nx
 
 from .utils import sqlite_type
-
 """
 NetworkX classes have been written to allow other dict-like storage methods aside from
 the default, which is a plain Python dict. All one needs to do (in theory) is create
@@ -52,7 +51,7 @@ def add_node(conn, key, value):
     values = []
     for k, v in value.items():
         if k not in columns:
-            col_type = sqlite_type(feature['properties'][key])
+            col_type = sqlite_type(feature["properties"][key])
             cursor.execute("ALTER TABLE nodes ADD COLUMN {} {}".format(key, col_type))
             conn.commit()
             sql_set.append("{}={}".format(k, v))
@@ -561,30 +560,36 @@ def add_edges_from(self, ebunch_to_add, _batch_size=BATCH_SIZE, **attr):
             _u, _v, d = edge
             keys = []
             values = []
+            placeholders = []
             for k, v in d.items():
+                placeholder = "?"
                 if k not in columns:
                     col_type = sqlite_type(v)
                     cursor.execute("ALTER TABLE edges ADD COLUMN {} {}".format(k, col_type))
                     self.conn.commit()
 
+                if k == "_geometry":
+                    placeholder = "GeomFromText(?, 4326)"
+
                 columns.append(k)
                 keys.append(k)
                 values.append(v)
+                placeholders.append(placeholder)
 
             query = cursor.execute("SELECT * FROM edges WHERE _u = ? AND _v = ?", (_u, _v))
             if (query.fetchone() is not None) or ((_u, _v) in seen):
                 updates.append(edge)
             else:
-                inserts.append((["_u", "_v"] + keys, [_u, _v] + values))
+                inserts.append((["_u", "_v"] + keys, [_u, _v] + values, ["?", "?"] + placeholders))
             seen.add((_u, _v))
             nodes.add(_u)
             nodes.add(_v)
 
         insert_sql = "INSERT INTO edges ({}) VALUES ({})"
-        for qkeys, qvalues in inserts:
+        for qkeys, qvalues, qplaceholders in inserts:
             keysub = ", ".join(qkeys)
-            valsub = ", ".join("?" for v in qvalues)
-            template = insert_sql.format(keysub, valsub)
+            placeholdersub = ", ".join(qplaceholders)
+            template = insert_sql.format(keysub, placeholdersub)
             cursor.execute(template, qvalues)
 
         # update_sql = "UPDATE edges SET {} WHERE _u = ? AND _v = ?"
@@ -615,14 +620,23 @@ def add_edges_from(self, ebunch_to_add, _batch_size=BATCH_SIZE, **attr):
 
 def digraphdb(database, recreate=False):
     conn = sqlite3.connect(database)
+    conn.load_extension("mod_spatialite.so")
     if recreate:
         # Create the tables
         cursor = conn.cursor()
+        # TODO: investigate when 'AddGeometryColumn' should be added. Might result in
+        # speedups?
+        has_spatial = cursor.execute("PRAGMA table_info('spatial_ref_sys')")
+        try:
+            next(has_spatial)
+        except StopIteration:
+            cursor.execute("SELECT InitSpatialMetaData(1)")
         cursor.executescript("""
             DROP TABLE IF EXISTS edges;
             DROP TABLE IF EXISTS nodes;
             CREATE TABLE edges (_u integer, _v integer, UNIQUE(_u, _v));
-            CREATE TABLE nodes (_key, UNIQUE(_key));
+            CREATE TABLE nodes (_key, _geometry text, UNIQUE(_key));
+            SELECT AddGeometryColumn('edges', '_geometry', 4326, 'LINESTRING')
         """)
         conn.commit()
 
@@ -631,7 +645,7 @@ def digraphdb(database, recreate=False):
         self._pred = OuterAdjlist(reverse=True)
         self._succ = OuterAdjlist()
 
-    return type('DiGraphDB', (nx.DiGraph, ), {
+    return type("DiGraphDB", (nx.DiGraph, ), {
         "node_dict_factory": staticmethod(node_dict_factory_factory(conn)),
         "adjlist_outer_dict_factory": staticmethod(adjlist_outer_dict_factory_factory(conn)),
         "adjlist_inner_dict_factory": staticmethod(adjlist_inner_dict_factory_factory(conn)),
