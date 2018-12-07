@@ -10,7 +10,7 @@ from . import database, graphs, io
 @click.argument("outfile")
 def entwiner(infiles, outfile):
     click.echo("Creating database!")
-    G = graphs.digraphdb.digraphdb(outfile, recreate=True)
+    G = graphs.digraphdb.DiGraphDB(database=outfile, create=True)
 
     click.echo("Importing edges...")
     # Create progress bar(s)

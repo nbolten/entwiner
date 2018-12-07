@@ -1,5 +1,6 @@
 """Dict-like interface(s) for graphs."""
 import sqlite3
+import tempfile
 
 import networkx as nx
 
@@ -531,99 +532,113 @@ class AtlasView:
     # NOTE: __setitem__ is undefined on purpose so that it matches NetworkX 2.0
 
 
-def add_edges_from(self, ebunch_to_add, _batch_size=BATCH_SIZE, **attr):
-    if _batch_size < 2:
-        # User has entered invalid number (negative, zero) or 1. Use default behavior.
-        super().add_edges_from(self, ebunch_to_add, **attr)
-        return
+class DiGraphDB(nx.DiGraph):
+    def __init__(self, database=None, create=False, *args, **kwargs):
+        if database is None:
+            database = tempfile.mkstemp()
+        self.database = database
+        self.conn = self._get_connection()
+        if create:
+            self._create()
 
-    # Add multiple edges at once - saves time (1000X+ faster) on inserts
-    cursor = self.conn.cursor()
+        # The factories of nx dict-likes need to be informed of the connection
+        self.node_dict_factory = node_dict_factory_factory(self.conn)
+        self.adjlist_outer_dict_factory = adjlist_outer_dict_factory_factory(self.conn)
+        self.adjlist_inner_dict_factory = adjlist_inner_dict_factory_factory(self.conn)
+        self.edge_attr_dict_factory = dict
 
-    def add_edges(ebunch, **attr):
-        # Inserting one at a time is slow, so do it in a batch - need to iterate over
-        # the ebunch once to check for new columns, then insert multiple at a time
-        columns = [c[1] for c in cursor.execute("PRAGMA table_info(edges)")]
-        inserts = []
-        updates = []
-
-        nodes = set([])
-        seen = set([])
-        for edge in ebunch:
-            if len(edge) == 2:
-                edge = (edge[0], edge[1], attr)
-            elif len(edge) == 3:
-                edge = (edge[0], edge[1], {**attr, **edge[2]})
-            else:
-                raise ValueError("Edge must be 2-tuple of (u, v) or 3-tuple of (u, v, d)")
-
-            _u, _v, d = edge
-            keys = []
-            values = []
-            placeholders = []
-            for k, v in d.items():
-                placeholder = "?"
-                if k not in columns:
-                    col_type = sqlite_type(v)
-                    cursor.execute("ALTER TABLE edges ADD COLUMN {} {}".format(k, col_type))
-                    self.conn.commit()
-
-                if k == "_geometry":
-                    placeholder = "GeomFromText(?, 4326)"
-
-                columns.append(k)
-                keys.append(k)
-                values.append(v)
-                placeholders.append(placeholder)
-
-            query = cursor.execute("SELECT * FROM edges WHERE _u = ? AND _v = ?", (_u, _v))
-            if (query.fetchone() is not None) or ((_u, _v) in seen):
-                updates.append(edge)
-            else:
-                inserts.append((["_u", "_v"] + keys, [_u, _v] + values, ["?", "?"] + placeholders))
-            seen.add((_u, _v))
-            nodes.add(_u)
-            nodes.add(_v)
-
-        insert_sql = "INSERT INTO edges ({}) VALUES ({})"
-        for qkeys, qvalues, qplaceholders in inserts:
-            keysub = ", ".join(qkeys)
-            placeholdersub = ", ".join(qplaceholders)
-            template = insert_sql.format(keysub, placeholdersub)
-            cursor.execute(template, qvalues)
-
-        # update_sql = "UPDATE edges SET {} WHERE _u = ? AND _v = ?"
-        # for __u, __v, attr in updates:
-        #     assignments = ", ".join(["{}=?".format(k) for k in attr.keys()])
-        #     template = update_sql.format(assignments)
-        #     cursor.execute(template, list(attr.keys()) + [__u, __v])
-
-        cursor.executemany("INSERT OR IGNORE INTO nodes (_key) VALUES (?)", [[n] for n in nodes])
-
-        self.conn.commit()
+        super().__init__(*args, **kwargs)
 
 
-    ebunch_iter = iter(ebunch_to_add)
-    ebunch = []
-    while True:
-        try:
-            edge = next(ebunch_to_add)
-            ebunch.append(edge)
-        except StopIteration as e:
-            add_edges(ebunch, **attr)
-            break
+    def add_edges_from(self, ebunch_to_add, _batch_size=BATCH_SIZE, **attr):
+        if _batch_size < 2:
+            # User has entered invalid number (negative, zero) or 1. Use default behavior.
+            super().add_edges_from(self, ebunch_to_add, **attr)
+            return
 
-        if len(ebunch) == _batch_size:
-            add_edges(ebunch, **attr)
-            ebunch = []
+        # Add multiple edges at once - saves time (1000X+ faster) on inserts
+        cursor = self.conn.cursor()
+
+        def add_edges(ebunch, **attr):
+            # Inserting one at a time is slow, so do it in a batch - need to iterate over
+            # the ebunch once to check for new columns, then insert multiple at a time
+            columns = [c[1] for c in cursor.execute("PRAGMA table_info(edges)")]
+            inserts = []
+            updates = []
+
+            nodes = set([])
+            seen = set([])
+            for edge in ebunch:
+                if len(edge) == 2:
+                    edge = (edge[0], edge[1], attr)
+                elif len(edge) == 3:
+                    edge = (edge[0], edge[1], {**attr, **edge[2]})
+                else:
+                    raise ValueError("Edge must be 2-tuple of (u, v) or 3-tuple of (u, v, d)")
+
+                _u, _v, d = edge
+                keys = []
+                values = []
+                placeholders = []
+                for k, v in d.items():
+                    placeholder = "?"
+                    if k not in columns:
+                        col_type = sqlite_type(v)
+                        cursor.execute("ALTER TABLE edges ADD COLUMN {} {}".format(k, col_type))
+                        self.conn.commit()
+
+                    if k == "_geometry":
+                        placeholder = "GeomFromText(?, 4326)"
+
+                    columns.append(k)
+                    keys.append(k)
+                    values.append(v)
+                    placeholders.append(placeholder)
+
+                query = cursor.execute("SELECT * FROM edges WHERE _u = ? AND _v = ?", (_u, _v))
+                if (query.fetchone() is not None) or ((_u, _v) in seen):
+                    updates.append(edge)
+                else:
+                    inserts.append((["_u", "_v"] + keys, [_u, _v] + values, ["?", "?"] + placeholders))
+                seen.add((_u, _v))
+                nodes.add(_u)
+                nodes.add(_v)
+
+            insert_sql = "INSERT INTO edges ({}) VALUES ({})"
+            for qkeys, qvalues, qplaceholders in inserts:
+                keysub = ", ".join(qkeys)
+                placeholdersub = ", ".join(qplaceholders)
+                template = insert_sql.format(keysub, placeholdersub)
+                cursor.execute(template, qvalues)
+
+            # update_sql = "UPDATE edges SET {} WHERE _u = ? AND _v = ?"
+            # for __u, __v, attr in updates:
+            #     assignments = ", ".join(["{}=?".format(k) for k in attr.keys()])
+            #     template = update_sql.format(assignments)
+            #     cursor.execute(template, list(attr.keys()) + [__u, __v])
+
+            cursor.executemany("INSERT OR IGNORE INTO nodes (_key) VALUES (?)", [[n] for n in nodes])
+
+            self.conn.commit()
 
 
-def digraphdb(database, recreate=False):
-    conn = sqlite3.connect(database)
-    conn.load_extension("mod_spatialite.so")
-    if recreate:
+        ebunch_iter = iter(ebunch_to_add)
+        ebunch = []
+        while True:
+            try:
+                edge = next(ebunch_to_add)
+                ebunch.append(edge)
+            except StopIteration as e:
+                add_edges(ebunch, **attr)
+                break
+
+            if len(ebunch) == _batch_size:
+                add_edges(ebunch, **attr)
+                ebunch = []
+
+    def _create(self):
         # Create the tables
-        cursor = conn.cursor()
+        cursor = self.conn.cursor()
         # TODO: investigate when 'AddGeometryColumn' should be added. Might result in
         # speedups?
         has_spatial = cursor.execute("PRAGMA table_info('spatial_ref_sys')")
@@ -638,19 +653,9 @@ def digraphdb(database, recreate=False):
             CREATE TABLE nodes (_key, _geometry text, UNIQUE(_key));
             SELECT AddGeometryColumn('edges', '_geometry', 4326, 'LINESTRING')
         """)
-        conn.commit()
+        self.conn.commit()
 
-    def __init__(self, *arg, **kwarg):
-        super(*arg, **kwarg)
-        self._pred = OuterAdjlist(reverse=True)
-        self._succ = OuterAdjlist()
-
-    return type("DiGraphDB", (nx.DiGraph, ), {
-        "node_dict_factory": staticmethod(node_dict_factory_factory(conn)),
-        "adjlist_outer_dict_factory": staticmethod(adjlist_outer_dict_factory_factory(conn)),
-        "adjlist_inner_dict_factory": staticmethod(adjlist_inner_dict_factory_factory(conn)),
-        # "edge_attr_dict_factory": staticmethod(edge_attr_dict_factory_factory(conn)),
-        "edge_attr_dict_factory": dict,
-        "add_edges_from": add_edges_from,
-        "conn": conn,
-    })()
+    def _get_connection(self):
+        conn = sqlite3.connect(self.database)
+        conn.load_extension("mod_spatialite.so")
+        return conn

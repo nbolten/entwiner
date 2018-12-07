@@ -7,7 +7,7 @@ from entwiner import database, graphs
 START = '-122.5049849, 48.7798528'
 END = '-122.5091418, 48.7789324'
 
-G = graphs.digraphdb.digraphdb('sup.db')
+G = graphs.digraphdb.DiGraphDB(database='sup.db')
 
 
 t0 = time.time()
