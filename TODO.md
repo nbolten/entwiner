@@ -24,16 +24,18 @@ one. Example API: digraphdb.create() and digraphdb.connect().
 ## Backing for NetworkX graphs
 
 The SQLite databases produced by entwiner should be able to serve as a persistent data
-store for NetworkX graphs, albeit with a few constraints on associated attributes and
-the data types for node references. Aside from being cool (much larger graphs with
-NetworkX), this would also make all of the algorithms implemented for NetworkX
-available for entwiner
+store for NetworkX graphs in general. Roll into its own package? Should also offer a
+three-column serialized keys-values option as well. i.e. a schema strategy: this
+implies the need for a metadata table or two, with encoding schemes and column
+definitions. Could borrow from GeoPackage (an actual table in the database) or
+Datasette (a metadata json).
 
 ## Pluggable non-Python routing engines
 
 Python is great for lots of things, but is not particularly fast for implementing
 things like Dijkstra's algorithm. It would be great to have more implementations -
-they'd be faster and would also help enforce standard formatting.
+they'd be faster and would also help enforce standard formatting. e.g. Go or Rust
+implementations of Dijkstra that work on in-memory or on-disk versions of the graph.
 
 ## Interface with other SQLite + Python projects
 
@@ -44,3 +46,16 @@ they'd be faster and would also help enforce standard formatting.
 - GeoPackages are an OGC data standard for self-describing geospatial datasets that is
   really just an SQLite database. The databases produced by entwiner should borrow
   some of this approach, or could even just be a geopackage with an extra edge table.
+
+## 'Masked Graph' strategy for temporary edges in a Graph object.
+
+There are many cases where it is desirable to add 'temporary' data to a Graph, without
+actually modifying the 'ground truth' graph. Our immediate use case is shortest path
+algorithms in a geospatial context - we need to estimate the optimal path from
+arbitrary locations and therefore simulate two new half edges.
+
+In other implementations, we have just calculated the half edges costs first and done
+4 routes: all combinations of two start nodes and two edge nodes corresponding to the
+half edges. We could solve that particular problem by being more intelligent in our
+own dijkstra implementation, but an 'augmented' or 'masked' graph object that acts as
+if the new edges were really there could be used for arbitrary graph analytics.
