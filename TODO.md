@@ -11,13 +11,22 @@ ships with a Python-based one for use in research.
 # Bugs / Design
 
 ## Separate workflow for database creation
-
 Right now, specifying a database path that doesn't yet exist results in the creation of
 an SQLite table there. We should have separate workflows for accessing an existing
 'graph' database vs. creating a new one so that people don't accidentally create new
 databases and so that we can catch bad paths when attempting to connect to an existing
 one. Example API: digraphdb.create() and digraphdb.connect().
 
+## Prevent database locks
+If the process accessing the db dies, e.g. during the finding of routes or adding
+edges, the database remains locked. We should prevent this. One option is to wrap
+everything that runs SQL queries in try: except: finally: blocks (or just use a
+prebuilt SQL adapter like SQLAlchemy or PeeWee), but we should investigate other
+options.
+
+## Faster adding of edges
+Adding edges is needlessly slow. It should only take a second or two to do all of
+Seattle's AccessMap data, but it takes 10-30.
 
 # Ideas
 

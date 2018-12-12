@@ -3,6 +3,33 @@ import itertools
 import networkx as nx
 
 
+"""
+The purpose of these wrappers / masks is to act exactly like their masked graph
+object, just with 'temporary' edges stored in another place. This may be very
+difficult, so this docstring will contain ideas for how to implement such a mask.
+
+Requirements:
+
+1) The 'mask' data must be stored separately and presumably in-memory.
+
+2) The object must act exactly like the graph it's masking. What this means:
+    A) Edges and nodes can be added using the same interfaces: .add_edges, .add_nodes,
+    .add_edges_from.
+        i) Adding an edge implies more relationships than might be expected:
+            a) The edge from u1 to v1 and any associated data such that G[u1] shows
+            v1 as well as whatever other edges are adjacent in the 'real' graph.
+            b) u1 must be accessible as a predecessor of v1.
+            c) If the Graph is undirected, v1 -> u1 also needs to be added.
+        ii) There are low-level interfaces for networkx graphs, like the generators
+        for nodes, edges, and adjacencies, that are used repeatedly when adding or
+        accessing edges. It would be best to interface at this level for
+        generalizability and potentially a smaller (and easier to debug) interface.
+    B) Edges can be accessed via the iterable .edges() and via __getitem__ on the
+    graph object.
+
+"""
+
+
 class MaskedMapping:
     def __init__(self, mapping, mask_factory=dict, mask_defaults=None):
         self.mapping = mapping

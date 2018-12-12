@@ -2,12 +2,12 @@ import time
 
 import networkx as nx
 
-from entwiner import database, graphs
+from entwiner import graphs
 
-START = '-122.5049849, 48.7798528'
-END = '-122.5091418, 48.7789324'
+START = '-122.2370805, 47.5096408'
+END = '-122.2410717, 47.5110904'
 
-G = graphs.digraphdb.DiGraphDB(database='sup.db')
+G = graphs.digraphdb.DiGraphDB(database='test.db')
 
 
 t0 = time.time()

@@ -2,7 +2,7 @@
 
 import click
 
-from . import database, graphs, io
+from . import graphs, io
 
 
 @click.command()
