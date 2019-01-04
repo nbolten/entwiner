@@ -4,6 +4,7 @@ import json
 
 from shapely import geometry
 
+
 class InvalidFormatError(ValueError):
     """Entwiner was not able to read this format."""
 

@@ -5,6 +5,7 @@ import tempfile
 import networkx as nx
 
 from .utils import sqlite_type
+
 """
 NetworkX classes have been written to allow other dict-like storage methods aside from
 the default, which is a plain Python dict. All one needs to do (in theory) is create
@@ -33,14 +34,19 @@ BATCH_SIZE = 500
 class MissingEdgeError(Exception):
     pass
 
+
 def get_node(conn, key):
     ignore_cols = ["_key"]
     # TODO: some input checking on `key`?
     cursor = conn.cursor()
     query = cursor.execute("SELECT * FROM nodes WHERE _key = ?", (key,))
     columns = [c[1] for c in cursor.execute("PRAGMA table_info(nodes)")]
-    data = {k: v for row in query for k, v in zip(columns, row) if v is not None and
-            k not in ignore_cols}
+    data = {
+        k: v
+        for row in query
+        for k, v in zip(columns, row)
+        if v is not None and k not in ignore_cols
+    }
     return data
 
 
@@ -101,8 +107,12 @@ def get_edge_attr(conn, u, v):
     cursor = conn.cursor()
     columns = [c[1] for c in cursor.execute("PRAGMA table_info(edges)")]
     query = cursor.execute("SELECT * FROM edges WHERE _u = ? AND _v = ?", (u, v))
-    data = {k: v for row in query for k, v in zip(columns, row) if v is not None and
-            k not in ignore_cols}
+    data = {
+        k: v
+        for row in query
+        for k, v in zip(columns, row)
+        if v is not None and k not in ignore_cols
+    }
     return data
 
 
@@ -188,8 +198,12 @@ class NodeDB:
         cursor = self.conn.cursor()
         query = cursor.execute("SELECT * FROM nodes WHERE _key = ?", (key,))
         columns = self._columns()  # TODO: memoize and/or store as attr, not method
-        data = {k: v for row in query for k, v in zip(columns, row) if v is not None and
-                k not in self.ignore_cols}
+        data = {
+            k: v
+            for row in query
+            for k, v in zip(columns, row)
+            if v is not None and k not in self.ignore_cols
+        }
         return data
 
     def __contains__(self, key):
@@ -231,6 +245,7 @@ def node_dict_factory_factory(conn):
               values = node attributes).
 
     """
+
     def node_dict_factory():
         nodes = NodeDB()
         nodes.conn = conn
@@ -291,7 +306,7 @@ class EdgeAttr:
         return get_edge_attr(self.conn, self.u, self.v)[key]
 
     def __setitem__(self, key, value):
-        self.update({ key: value })
+        self.update({key: value})
 
     def __bool__(self):
         if get_edge_attr(self.conn, self.u, self.v):
@@ -337,10 +352,14 @@ class InnerAdjlist:
             where_col = "_u"
 
         columns = ", ".join([node_col] + self._columns())
-        template = "SELECT {}, {} FROM edges WHERE {} = ?".format(node_col, where_col, where_col)
+        template = "SELECT {}, {} FROM edges WHERE {} = ?".format(
+            node_col, where_col, where_col
+        )
         query = cursor.execute(template, (self.u,))
 
-        return ((row[0], EdgeAttr(self.conn, row[0], row[1], self.reverse)) for row in query)
+        return (
+            (row[0], EdgeAttr(self.conn, row[0], row[1], self.reverse)) for row in query
+        )
 
     def _columns(self):
         # TODO: memoize and/or store as attr, not method
@@ -352,13 +371,16 @@ class InnerAdjlist:
                 columns.append(c[1])
         return columns
 
-
     def __getitem__(self, key):
         cursor = self.conn.cursor()
         if self.reverse:
-            query = cursor.execute("SELECT * FROM edges WHERE _u = ? AND _v = ?", (key, self.u))
+            query = cursor.execute(
+                "SELECT * FROM edges WHERE _u = ? AND _v = ?", (key, self.u)
+            )
         else:
-            query = cursor.execute("SELECT * FROM edges WHERE _u = ? AND _v = ?", (self.u, key))
+            query = cursor.execute(
+                "SELECT * FROM edges WHERE _u = ? AND _v = ?", (self.u, key)
+            )
 
         if query.fetchone() is not None:
             return EdgeAttr(self.conn, u=self.u, v=key, reverse=self.reverse)
@@ -369,9 +391,9 @@ class InnerAdjlist:
         cursor = self.conn.cursor()
         columns = self._columns()
         if key in self:
-            update_edge(self.conn, key, self.u, value, reverse = self.reverse)
+            update_edge(self.conn, key, self.u, value, reverse=self.reverse)
         else:
-            add_edge(self.conn, self.u, key, value, reverse = self.reverse)
+            add_edge(self.conn, self.u, key, value, reverse=self.reverse)
 
     def __contains__(self, key):
         cursor = self.conn.cursor()
@@ -420,6 +442,7 @@ class OuterAdjlist:
     and override __init__ in DiGraph.
 
     """
+
     ignore_cols = ["_u", "_v"]
 
     def __init__(self, reverse=False):
@@ -438,8 +461,10 @@ class OuterAdjlist:
 
         query = cursor.execute("SELECT {} FROM edges".format(cols))
 
-        return ((row[0], InnerAdjlist(self.conn, u=row[0], reverse=self.reverse)) for row in query)
-
+        return (
+            (row[0], InnerAdjlist(self.conn, u=row[0], reverse=self.reverse))
+            for row in query
+        )
 
     def _columns(self):
         # TODO: memoize and/or store as attr, not method
@@ -549,7 +574,6 @@ class DiGraphDB(nx.DiGraph):
 
         super().__init__(*args, **kwargs)
 
-
     def add_edges_from(self, ebunch_to_add, _batch_size=BATCH_SIZE, **attr):
         if _batch_size < 2:
             # User has entered invalid number (negative, zero) or 1. Use default behavior.
@@ -574,7 +598,9 @@ class DiGraphDB(nx.DiGraph):
                 elif len(edge) == 3:
                     edge = (edge[0], edge[1], {**attr, **edge[2]})
                 else:
-                    raise ValueError("Edge must be 2-tuple of (u, v) or 3-tuple of (u, v, d)")
+                    raise ValueError(
+                        "Edge must be 2-tuple of (u, v) or 3-tuple of (u, v, d)"
+                    )
 
                 _u, _v, d = edge
                 keys = []
@@ -584,7 +610,9 @@ class DiGraphDB(nx.DiGraph):
                     placeholder = "?"
                     if k not in columns:
                         col_type = sqlite_type(v)
-                        cursor.execute("ALTER TABLE edges ADD COLUMN {} {}".format(k, col_type))
+                        cursor.execute(
+                            "ALTER TABLE edges ADD COLUMN {} {}".format(k, col_type)
+                        )
                         self.conn.commit()
 
                     if k == "_geometry":
@@ -595,11 +623,19 @@ class DiGraphDB(nx.DiGraph):
                     values.append(v)
                     placeholders.append(placeholder)
 
-                query = cursor.execute("SELECT * FROM edges WHERE _u = ? AND _v = ?", (_u, _v))
+                query = cursor.execute(
+                    "SELECT * FROM edges WHERE _u = ? AND _v = ?", (_u, _v)
+                )
                 if (query.fetchone() is not None) or ((_u, _v) in seen):
                     updates.append(edge)
                 else:
-                    inserts.append((["_u", "_v"] + keys, [_u, _v] + values, ["?", "?"] + placeholders))
+                    inserts.append(
+                        (
+                            ["_u", "_v"] + keys,
+                            [_u, _v] + values,
+                            ["?", "?"] + placeholders,
+                        )
+                    )
                 seen.add((_u, _v))
                 nodes.add(_u)
                 nodes.add(_v)
@@ -617,10 +653,11 @@ class DiGraphDB(nx.DiGraph):
             #     template = update_sql.format(assignments)
             #     cursor.execute(template, list(attr.keys()) + [__u, __v])
 
-            cursor.executemany("INSERT OR IGNORE INTO nodes (_key) VALUES (?)", [[n] for n in nodes])
+            cursor.executemany(
+                "INSERT OR IGNORE INTO nodes (_key) VALUES (?)", [[n] for n in nodes]
+            )
 
             self.conn.commit()
-
 
         ebunch_iter = iter(ebunch_to_add)
         ebunch = []
@@ -646,13 +683,15 @@ class DiGraphDB(nx.DiGraph):
             next(has_spatial)
         except StopIteration:
             cursor.execute("SELECT InitSpatialMetaData(1)")
-        cursor.executescript("""
+        cursor.executescript(
+            """
             DROP TABLE IF EXISTS edges;
             DROP TABLE IF EXISTS nodes;
             CREATE TABLE edges (_u integer, _v integer, UNIQUE(_u, _v));
             CREATE TABLE nodes (_key, _geometry text, UNIQUE(_key));
             SELECT AddGeometryColumn('edges', '_geometry', 4326, 'LINESTRING')
-        """)
+        """
+        )
         self.conn.commit()
 
     def _get_connection(self):
