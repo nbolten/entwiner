@@ -4,20 +4,14 @@ import json
 
 from shapely import geometry
 
-from . import crs
-
-
-PRECISION = 7
-
-
 class InvalidFormatError(ValueError):
     """Entwiner was not able to read this format."""
 
 
-def edge_generator(feature_gen):
+def edge_generator(feature_gen, precision):
     def get_node(feature, index):
         coords = feature["geometry"]["coordinates"][index]
-        point = [str(round(c, PRECISION)) for c in coords]
+        point = [str(round(c, precision)) for c in coords]
         return ", ".join(point)
 
     def generate_attribs(feature):
@@ -44,4 +38,5 @@ def read_geojson(path):
 
     # Convert to lon-lat
     # TODO: extract CRS from GeoJSON or assume it's already lon-lat
+    # TODO: just use fiona
     return iter(geojson["features"])

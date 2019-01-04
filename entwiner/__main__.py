@@ -4,27 +4,16 @@ import click
 
 from . import build
 
+BATCH_SIZE=1000
+
 
 @click.command()
 @click.argument("infiles", nargs=-1, type=click.Path("r"))
 @click.argument("outfile")
-def entwiner(infiles, outfile):
+@click.option("--precision", default=7)
+def entwiner(infiles, outfile, precision):
     click.echo("Creating database and importing edges...")
-    build.create_graph(infiles, outfile)
-    # G = graphs.digraphdb.DiGraphDB(database=outfile, create=True)
-
-    # # Create progress bar(s)
-    # BATCH_SIZE = 1000
-    # for path in infiles:
-    #     feature_gen = io.feature_generator(path)
-    #     edge_gen = io.edge_generator(feature_gen)
-    #     G.add_edges_from(edge_gen, _batch_size=BATCH_SIZE)
-
-    #     # TODO: do this without redundant i/o
-    #     feature_gen_rev = io.feature_generator(path)
-    #     edge_gen_rev = ((e[1], e[0], e[2]) for e in io.edge_generator(feature_gen_rev))
-    #     G.add_edges_from(edge_gen_rev, _batch_size=BATCH_SIZE)
-
+    build.create_graph(infiles, outfile, precision=precision, batch_size=BATCH_SIZE)
     click.echo("Done!")
 
 

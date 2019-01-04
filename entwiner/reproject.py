@@ -2,11 +2,11 @@
 import pyproj
 
 
-def project(coordinates, from_crs=None, to_crs=None):
+def reproject(coordinates, from_crs=None, to_crs=None):
     if to_crs is None:
         if from_crs is None:
             raise ValueError("from_crs or to_crs must be set")
-        to_crs = 'epsg:4326'
+        to_crs = "epsg:4326"
 
     from_proj = pyproj.Proj(init=from_crs)
     to_proj = pyproj.Proj(init=to_crs)
