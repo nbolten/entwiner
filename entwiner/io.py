@@ -1,43 +1,52 @@
 """Wraps various readers/writers for different geospatial formats with a focus on
 low-memory reading."""
-import json
+import copy
 
-from shapely import geometry
-
-
-class InvalidFormatError(ValueError):
-    """Entwiner was not able to read this format."""
+import fiona
 
 
-def edge_generator(feature_gen, precision):
-    def get_node(feature, index):
-        coords = feature["geometry"]["coordinates"][index]
-        point = [str(round(c, precision)) for c in coords]
-        return ", ".join(point)
-
-    def generate_attribs(feature):
-        attrib = feature["properties"]
-        attrib["_geometry"] = geometry.shape(feature["geometry"]).wkt
-        return attrib
-
-    return ((get_node(f, 0), get_node(f, -1), generate_attribs(f)) for f in feature_gen)
+class UnknownGeometryError(ValueError):
+    pass
 
 
-def feature_generator(path):
-    if path.endswith("geojson"):
-        # Use GeoJSON reader
-        return read_geojson(path)
-    else:
-        raise InvalidFormatError("{} not recognized as valid input format".format(path))
+def edge_generator(path, precision, rev=False):
+    with fiona.open(path) as handle:
+        for f in handle:
+            props = dict(f["properties"])
+            props["_geometry"] = to_wkt(f["geometry"])
+
+            u = ", ".join(
+                [str(round(c, precision)) for c in f["geometry"]["coordinates"][0]]
+            )
+            v = ", ".join(
+                [str(round(c, precision)) for c in f["geometry"]["coordinates"][-1]]
+            )
+            yield u, v, props
+            if rev:
+                props = copy.deepcopy(props)
+                props["_geometry"] = to_wkt_rev(f["geometry"])
+                yield v, u, props
 
 
-def read_geojson(path):
-    # FIXME: this strategy is not safe for low-memory situations. Are there any
-    # strategies for incrementally loading GeoJSON?
-    with open(path) as f:
-        geojson = json.load(f)
+def to_wkt(geom):
+    type_map = {"LineString": "LINESTRING"}
+    geom_type = type_map.get(geom["type"], None)
+    if geom_type is None:
+        raise UnknownGeometryError()
 
-    # Convert to lon-lat
-    # TODO: extract CRS from GeoJSON or assume it's already lon-lat
-    # TODO: just use fiona
-    return iter(geojson["features"])
+    coords = ", ".join(
+        [" ".join([str(p) for p in coord]) for coord in geom["coordinates"]]
+    )
+    return "{}({})".format(geom_type, coords)
+
+
+def to_wkt_rev(geom):
+    type_map = {"LineString": "LINESTRING"}
+    geom_type = type_map.get(geom["type"], None)
+    if geom_type is None:
+        raise UnknownGeometryError()
+
+    coords = ", ".join(
+        [" ".join([str(p) for p in coord]) for coord in geom["coordinates"][::-1]]
+    )
+    return "{}({})".format(geom_type, coords)

@@ -29,6 +29,8 @@ value column rather than spreading keys into columns and requiring flat data.
 # Might be able to exploit cache?
 
 BATCH_SIZE = 500
+SQL_PLACEHOLDER = "?"
+GEOM_SQL_PLACEHOLDER = "GeomFromText(?, 4326)"
 
 
 class MissingEdgeError(Exception):
@@ -607,7 +609,6 @@ class DiGraphDB(nx.DiGraph):
                 values = []
                 placeholders = []
                 for k, v in d.items():
-                    placeholder = "?"
                     if k not in columns:
                         col_type = sqlite_type(v)
                         cursor.execute(
@@ -616,12 +617,13 @@ class DiGraphDB(nx.DiGraph):
                         self.conn.commit()
 
                     if k == "_geometry":
-                        placeholder = "GeomFromText(?, 4326)"
+                        placeholders.append(GEOM_SQL_PLACEHOLDER)
+                    else:
+                        placeholders.append(SQL_PLACEHOLDER)
 
                     columns.append(k)
                     keys.append(k)
                     values.append(v)
-                    placeholders.append(placeholder)
 
                 query = cursor.execute(
                     "SELECT * FROM edges WHERE _u = ? AND _v = ?", (_u, _v)

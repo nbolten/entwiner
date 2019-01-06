@@ -17,13 +17,6 @@ an SQLite table there. We should have separate workflows for accessing an existi
 databases and so that we can catch bad paths when attempting to connect to an existing
 one. Example API: digraphdb.create() and digraphdb.connect().
 
-## Prevent database locks
-If the process accessing the db dies, e.g. during the finding of routes or adding
-edges, the database remains locked. We should prevent this. One option is to wrap
-everything that runs SQL queries in try: except: finally: blocks (or just use a
-prebuilt SQL adapter like SQLAlchemy or PeeWee), but we should investigate other
-options.
-
 ## Faster adding of edges
 Adding edges is needlessly slow. It should only take a second or two to do all of
 Seattle's AccessMap data, but it takes 10-30.
@@ -55,16 +48,3 @@ implementations of Dijkstra that work on in-memory or on-disk versions of the gr
 - GeoPackages are an OGC data standard for self-describing geospatial datasets that is
   really just an SQLite database. The databases produced by entwiner should borrow
   some of this approach, or could even just be a geopackage with an extra edge table.
-
-## 'Masked Graph' strategy for temporary edges in a Graph object.
-
-There are many cases where it is desirable to add 'temporary' data to a Graph, without
-actually modifying the 'ground truth' graph. Our immediate use case is shortest path
-algorithms in a geospatial context - we need to estimate the optimal path from
-arbitrary locations and therefore simulate two new half edges.
-
-In other implementations, we have just calculated the half edges costs first and done
-4 routes: all combinations of two start nodes and two edge nodes corresponding to the
-half edges. We could solve that particular problem by being more intelligent in our
-own dijkstra implementation, but an 'augmented' or 'masked' graph object that acts as
-if the new edges were really there could be used for arbitrary graph analytics.
