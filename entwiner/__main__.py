@@ -4,7 +4,7 @@ import click
 
 from . import build
 
-BATCH_SIZE = 1000
+BATCH_SIZE = 10000
 
 
 @click.command()

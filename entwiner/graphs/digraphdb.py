@@ -683,14 +683,12 @@ class DiGraphDB(nx.DiGraph):
             next(has_spatial)
         except StopIteration:
             cursor.execute("SELECT InitSpatialMetaData(1)")
-        cursor.executescript(
-            """
-            DROP TABLE IF EXISTS edges;
-            DROP TABLE IF EXISTS nodes;
-            CREATE TABLE edges (_u integer, _v integer, UNIQUE(_u, _v));
-            CREATE TABLE nodes (_key, _geometry text, UNIQUE(_key));
-            SELECT AddGeometryColumn('edges', '_geometry', 4326, 'LINESTRING')
-        """
+        cursor.execute("DROP TABLE IF EXISTS edges")
+        cursor.execute("DROP TABLE IF EXISTS nodes")
+        cursor.execute("CREATE TABLE nodes (_key, _geometry text, UNIQUE(_key))")
+        cursor.execute("CREATE TABLE edges (_u integer, _v integer, UNIQUE(_u, _v))")
+        cursor.execute(
+            "SELECT AddGeometryColumn('edges', '_geometry', 4326, 'LINESTRING')"
         )
         self.conn.commit()
 

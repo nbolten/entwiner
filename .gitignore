@@ -8,3 +8,4 @@ venv
 # Database stuff
 *.db
 *.db.tmp
+*.db-journal
