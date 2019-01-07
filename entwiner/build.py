@@ -3,7 +3,6 @@
 from . import graphs, io
 
 
-@profile
 def create_graph(infiles, outfile, precision=7, batch_size=1000):
     G = graphs.digraphdb.DiGraphDB(database=outfile, create=True)
 
