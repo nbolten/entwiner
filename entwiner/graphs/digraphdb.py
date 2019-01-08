@@ -33,147 +33,123 @@ SQL_PLACEHOLDER = "?"
 GEOM_SQL_PLACEHOLDER = "GeomFromText(?, 4326)"
 
 
+class NodeNotFoundError(ValueError):
+    pass
+
+
+class EdgeNotFoundError(ValueError):
+    pass
+
+
 class MissingEdgeError(Exception):
     pass
 
 
+# FIXME: create an object that knows about the connection and can do stuff like
+# add/remove/find edges, use as adapter for other classes.
+
+
+def add_cols_if_not_exist(conn, keys, values, table):
+    cursor = conn.cursor()
+    existing_cols = set(
+        [c[1] for c in cursor.execute("PRAGMA table_info({})".format(table))]
+    )
+    missing = existing_cols - set(keys)
+    for key in missing:
+        col_type = sqlite_type(ddict[key])
+        cursor.execute("ALTER TABLE {} ADD COLUMN {} {}".format(table, key, col_type))
+        conn.commit()
+
+
 def get_node(conn, key):
-    ignore_cols = ["_key"]
-    # TODO: some input checking on `key`?
     cursor = conn.cursor()
     query = cursor.execute("SELECT * FROM nodes WHERE _key = ?", (key,))
-    columns = [c[1] for c in cursor.execute("PRAGMA table_info(nodes)")]
-    data = {
-        k: v
-        for row in query
-        for k, v in zip(columns, row)
-        if v is not None and k not in ignore_cols
-    }
+    data = dict(query.fetchone())
+    if data is None:
+        raise NodeNotFoundError("Specified node does not exist.")
+    data.pop("_key")
     return data
 
 
-def add_node(conn, key, value):
+def add_node(conn, key, ddict=None):
+    if ddict is None:
+        ddict = {}
+
     cursor = conn.cursor()
-    columns = [c[1] for c in cursor.execute("PRAGMA table_info(nodes)")]
 
-    keys = []
-    values = []
-    for k, v in value.items():
-        if k not in columns:
-            col_type = sqlite_type(feature["properties"][key])
-            cursor.execute("ALTER TABLE nodes ADD COLUMN {} {}".format(key, col_type))
-            conn.commit()
-            sql_set.append("{}={}".format(k, v))
-
-        keys.append(k)
-        values.append(v)
-
-    keys = ["_key"] + [str(k) for k in keys]
-    values = [str(key)] + [str(v) for v in values]
+    keys, values = zip(*ddict.items())
+    add_cols_if_not_exist(conn, keys, values, "nodes")
 
     template = "INSERT INTO nodes ({}) VALUES ({})"
-    col_str = ", ".join(keys)
+    col_str = ", ".join(["_key"] + keys)
     val_str = ", ".join(["?" for v in values])
     sql = template.format(col_str, val_str)
-    cursor.execute(sql, values)
+    cursor.execute(sql, [str(key)] + values)
     conn.commit()
 
 
-def update_node(conn, key, value):
-    if not value:
+def update_node(conn, key, ddict):
+    if not ddict:
         return
     cursor = conn.cursor()
-    columns = [c[1] for c in cursor.execute("PRAGMA table_info(nodes)")]
 
-    keys = []
-    values = []
-    for k, v in value.items():
-        if k not in columns:
-            col_type = sqlite_type(v)
-            cursor.execute("ALTER TABLE nodes ADD COLUMN {} {}".format(key, col_type))
-            sql_set.append("{}={}".format(k, v))
-
-        keys.append(k)
-        values.append(v)
+    keys, values = zip(*ddict.items())
+    add_cols_if_not_exist(conn, keys, values, "nodes")
 
     template = "UPDATE nodes SET {} WHERE _key = ?"
-    assignments = ["{} = {}".format(k, v) for k, v in zip(keys, values)]
+    assignments = ["{} = ?".format(k) for k in keys]
     sql = template.format(", ".join(assignments))
-    cursor.execute(sql, (key,))
+    cursor.execute(sql, (values + [key],))
     conn.commit()
 
 
 def get_edge_attr(conn, u, v):
-    ignore_cols = ["_u", "_v"]
-    # TODO: some input checking on `key`?
     cursor = conn.cursor()
-    columns = [c[1] for c in cursor.execute("PRAGMA table_info(edges)")]
     query = cursor.execute("SELECT * FROM edges WHERE _u = ? AND _v = ?", (u, v))
-    data = {
-        k: v
-        for row in query
-        for k, v in zip(columns, row)
-        if v is not None and k not in ignore_cols
-    }
+    row = query.fetchone()
+    if row is None:
+        raise EdgeNotFoundError("No such edge exists.")
+
+    data = dict(row)
+    data.pop("_u")
+    data.pop("_v")
     return data
 
 
-def add_edge(conn, _u, _v, value, reverse=False):
+def add_edge(conn, _u, _v, ddict, reverse=False):
     if reverse:
         _u, _v = _v, _u
 
     cursor = conn.cursor()
 
-    # TODO: this is where multi/non-multi graphs would have divergent behavior
     query = cursor.execute("SELECT * FROM edges WHERE _u = ? AND _v = ?", (_u, _v))
     try:
         next(query)
         # Edge already exists - update
-        update_edge(conn, _u, _v, value, reverse=reverse)
+        update_edge(conn, _u, _v, ddict, reverse=reverse)
         return
-    except:
-        # FIXME: catch iteration error instead
+    except StopIteration:
         pass
 
-    columns = [c[1] for c in cursor.execute("PRAGMA table_info(edges)")]
-
-    keys = []
-    values = []
-    for k, v in value.items():
-        if k not in columns:
-            col_type = sqlite_type(v)
-            cursor.execute("ALTER TABLE edges ADD COLUMN {} {}".format(k, col_type))
-
-        keys.append(k)
-        values.append(v)
-
-    keys = ["_u", "_v"] + [str(k) for k in keys]
-    values = [str(_u), str(_v)] + [str(val) for val in values]
+    keys, values = zip(*ddict.items())
+    add_cols_if_not_exist(conn, keys, values, "edges")
 
     template = "INSERT INTO edges ({}) VALUES ({})"
-    cols_str = ", ".join(keys)
-    values_str = ", ".join(["?" for v in values])
+    cols_str = ", ".join(["_u", "_v"] + keys)
+    values_str = ", ".join(["?" for v in [_u, _v] + values])
     template = template.format(cols_str, values_str)
     cursor.execute(template, values)
     conn.commit()
 
 
-def update_edge(conn, u, v, value, reverse=False):
-    if reverse:
-        u, v = v, u
-    cursor = conn.cursor()
-    columns = [c[1] for c in cursor.execute("PRAGMA table_info(edges)")]
+def update_edge(conn, u, v, ddict, reverse=False):
+    if ddict:
+        if reverse:
+            u, v = v, u
+        cursor = conn.cursor()
 
-    if value:
-        keys = []
-        values = []
-        for k, val in value.items():
-            if k not in columns:
-                col_type = sqlite_type(val)
-                cursor.execute("ALTER TABLE edges ADD COLUMN {} {}".format(k, col_type))
-
-            keys.append(k)
-            values.append(val)
+        keys, values = zip(*ddict.items())
+        add_cols_if_not_exist(conn, keys, values, "edges")
 
         template = "UPDATE edges SET {} WHERE _u = ? AND _v = ?"
         assignments = ["{} = ?".format(k) for k in keys]
@@ -196,33 +172,17 @@ class NodeDB:
         return [c[1] for c in cursor.execute("PRAGMA table_info(nodes)")]
 
     def __getitem__(self, key):
-        # TODO: some input checking on `key`?
-        cursor = self.conn.cursor()
-        query = cursor.execute("SELECT * FROM nodes WHERE _key = ?", (key,))
-        columns = self._columns()  # TODO: memoize and/or store as attr, not method
-        data = {
-            k: v
-            for row in query
-            for k, v in zip(columns, row)
-            if v is not None and k not in self.ignore_cols
-        }
-        return data
+        return get_node(self.conn, key)
 
     def __contains__(self, key):
-        cursor = self.conn.cursor()
-        query = cursor.execute("SELECT * FROM nodes WHERE _key = ?", (key,))
         try:
-            next(query)
-        except:
+            self[key]
+        except NodeNotFoundError:
             return False
-
         return True
 
     def __setitem__(self, key, value):
-        # TODO: some input checking on `key` and `value`?
-        # value is assumed to be a flat dict-like
         if key in self:
-            # If key already exists in db, update values
             update_node(self.conn, key, value)
         else:
             add_node(self.conn, key, value)
@@ -678,8 +638,6 @@ class DiGraphDB(nx.DiGraph):
     def _create(self):
         # Create the tables
         cursor = self.conn.cursor()
-        # TODO: investigate when 'AddGeometryColumn' should be added. Might result in
-        # speedups?
         has_spatial = cursor.execute("PRAGMA table_info('spatial_ref_sys')")
         try:
             next(has_spatial)
@@ -689,12 +647,17 @@ class DiGraphDB(nx.DiGraph):
         cursor.execute("DROP TABLE IF EXISTS nodes")
         cursor.execute("CREATE TABLE nodes (_key, _geometry text, UNIQUE(_key))")
         cursor.execute("CREATE TABLE edges (_u integer, _v integer, UNIQUE(_u, _v))")
-        cursor.execute(
-            "SELECT AddGeometryColumn('edges', '_geometry', 4326, 'LINESTRING')"
+        q = cursor.execute(
+            "SELECT * FROM geometry_columns WHERE f_table_name = 'edges' AND f_geometry_column = '_geometry'"
         )
+        if q.fetchone() is None:
+            cursor.execute(
+                "SELECT AddGeometryColumn('edges', '_geometry', 4326, 'LINESTRING')"
+            )
         self.conn.commit()
 
     def _get_connection(self):
         conn = sqlite3.connect(self.database)
+        conn.row_factory = sqlite3.Row
         conn.load_extension("mod_spatialite.so")
         return conn
