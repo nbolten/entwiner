@@ -516,7 +516,7 @@ class AtlasView:
         except MissingEdgeError:
             return KeyError
 
-    # NOTE: __setitem__ is undefined on purpose so that it matches NetworkX 2.0
+    # NOTE: __setitem__ is left undefined on purpose to match NetworkX 2.0 behavior
 
 
 class DiGraphDB(nx.DiGraph):
@@ -608,12 +608,6 @@ class DiGraphDB(nx.DiGraph):
                 placeholdersub = ", ".join(qplaceholders)
                 template = insert_sql.format(keysub, placeholdersub)
                 cursor.execute(template, qvalues)
-
-            # update_sql = "UPDATE edges SET {} WHERE _u = ? AND _v = ?"
-            # for __u, __v, attr in updates:
-            #     assignments = ", ".join(["{}=?".format(k) for k in attr.keys()])
-            #     template = update_sql.format(assignments)
-            #     cursor.execute(template, list(attr.keys()) + [__u, __v])
 
             cursor.executemany(
                 "INSERT OR IGNORE INTO nodes (_key) VALUES (?)", [[n] for n in nodes]
