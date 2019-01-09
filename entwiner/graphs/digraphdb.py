@@ -118,14 +118,6 @@ class Edge:
         else:
             self.delayed_attr.update(attr)
 
-    def commit_attrs(self):
-        if self.delayed_attr:
-            if self.u is not None and self.v is not None:
-                self.graphdb.update_edge(self.u, self.v, self.delayed_attr)
-            else:
-                # TODO: make into separate error class
-                raise Exception("Can't commit attrs to edge without u and v.")
-
     def __getitem__(self, key):
         return self.graphdb.get_edge_attr(self.u, self.v)[key]
 
@@ -140,6 +132,47 @@ class Edge:
 
     def __iter__(self):
         return iter(self.graphdb.get_edge_attr(self.u, self.v))
+
+
+class RealizedEdge:
+    """Edge that stores data in a dict, can be initialized in a dict, and syncs to DB.
+
+    """
+
+    def __init__(self, _graphdb=None, _u=None, _v=None, **kwargs):
+        self.graphdb = _graphdb
+        self.u = _u
+        self.v = _v
+        self.dict = dict(**kwargs)
+
+    def get(self, key, defaults):
+        try:
+            return self[key]
+        except KeyError:
+            return defaults
+
+    def keys(self):
+        return self.dict.keys()
+
+    def items(self):
+        return self.dict.items()
+
+    def update(self, attr):
+        self.dict.update(attr)
+        self.graphdb.update_edge(self.u, self.v, attr)
+
+    def __getitem__(self, key):
+        return self.dict[key]
+
+    def __setitem__(self, key, value):
+        self.dict[key] = value
+        self.graphdb.update_edge(self.u, self.v, attr)
+
+    def __bool__(self):
+        return bool(self.dict)
+
+    def __iter__(self):
+        return iter(self.dict)
 
 
 def edge_factory_factory(conn):
@@ -337,11 +370,11 @@ class InnerAdjlist:
         return query.fetchone()[0]
 
 
-def adjlist_inner_dict_factory_factory(graphdb):
-    def adjlist_inner_dict_factory():
+def adjlist_inner_factory_factory(graphdb):
+    def adjlist_inner_factory():
         return InnerAdjlist(graphdb)
 
-    return adjlist_inner_dict_factory
+    return adjlist_inner_factory
 
 
 class DiGraphDB(nx.DiGraph):
@@ -359,9 +392,7 @@ class DiGraphDB(nx.DiGraph):
         # The factories of nx dict-likes need to be informed of the connection
         self.node_dict_factory = node_factory_factory(self.graphdb)
         self.adjlist_outer_dict_factory = successors_factory_factory(self.graphdb)
-        self.adjlist_inner_dict_factory = adjlist_inner_dict_factory_factory(
-            self.graphdb
-        )
+        self.adjlist_inner_dict_factory = adjlist_inner_factory_factory(self.graphdb)
         self.edge_attr_dict_factory = dict
 
         # FIXME: should use a persistent table/container for .graph as well.
@@ -467,6 +498,16 @@ class DiGraphDB(nx.DiGraph):
             if len(ebunch) == _batch_size:
                 add_edges(ebunch, **attr)
                 ebunch = []
+
+    def edges_iter(self):
+        """Roughly equivalent to the .edges interface, but much faster."""
+        conn = self.graphdb.conn
+        query = conn.execute("SELECT * FROM edges")
+        for row in query:
+            row = dict(row)
+            u = row.pop("_u")
+            v = row.pop("_v")
+            yield (u, v, RealizedEdge(**row))
 
     def _create(self):
         # Create the tables

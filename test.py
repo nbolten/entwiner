@@ -8,14 +8,15 @@ START = "-122.2370805, 47.5096408"
 END = "-122.2410717, 47.5110904"
 
 G = graphs.digraphdb.DiGraphDB(path="test.db")
+G2 = nx.DiGraph(G.edges_iter())
 
 
 t0 = time.time()
 
 # cost_fun = lambda u, v, d: d.get('length', 0)
-x = nx.algorithms.shortest_paths.dijkstra_path(G, START, END, "length")
+x = nx.algorithms.shortest_paths.dijkstra_path(G2, START, END, "length")
 print(x)
-print(list(G[END].items()))
+print(list(G2[END].items()))
 # print(time.time() - t0)
 # print([(k, d) for k, d in G._succ[START].items()])
 
