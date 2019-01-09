@@ -24,9 +24,8 @@ value column rather than spreading keys into columns and requiring flat data.
 
 """
 
-# FIXME: conversion to built-in networkx graph is way, way too slow (~22 seconds for
-# Bellingham). The issue arises from non-batched queries and potentially redundant edges.
-# Might be able to exploit cache?
+# FIXME: G._pred is not functioning correctly - need a way to distinguish predecessor
+# adjacency dict-like from successor.
 
 BATCH_SIZE = 500
 SQL_PLACEHOLDER = "?"
@@ -49,16 +48,25 @@ class MissingEdgeError(Exception):
 # add/remove/find edges, use as adapter for other classes.
 
 
-def add_cols_if_not_exist(conn, keys, values, table):
-    cursor = conn.cursor()
+def add_cols_if_not_exist_sql(conn, colnames, values, table):
     existing_cols = set(
-        [c[1] for c in cursor.execute("PRAGMA table_info({})".format(table))]
+        [c[1] for c in conn.execute("PRAGMA table_info({})".format(table))]
     )
-    missing = existing_cols - set(keys)
-    for key in missing:
-        col_type = sqlite_type(ddict[key])
-        cursor.execute("ALTER TABLE {} ADD COLUMN {} {}".format(table, key, col_type))
-        conn.commit()
+    sql_list = []
+    for colname, value in zip(colnames, values):
+        if colname not in existing_cols:
+            col_type = sqlite_type(ddict[key])
+            sql_list.append(
+                "ALTER TABLE {} ADD COLUMN {} {};".format(table, colname, col_type)
+            )
+
+    return "\n".join(sql_list)
+
+
+def add_cols_if_not_exist(conn, keys, values, table):
+    sql = add_cols_if_not_exist_sql(conn, keys, values, table)
+    conn.execute(sql)
+    conn.commit()
 
 
 def get_node(conn, key):
@@ -116,60 +124,43 @@ def get_edge_attr(conn, u, v):
     return data
 
 
-def add_edge(conn, _u, _v, ddict, reverse=False):
-    if reverse:
-        _u, _v = _v, _u
-
-    cursor = conn.cursor()
-
-    query = cursor.execute("SELECT * FROM edges WHERE _u = ? AND _v = ?", (_u, _v))
-    try:
-        next(query)
-        # Edge already exists - update
-        update_edge(conn, _u, _v, ddict, reverse=reverse)
-        return
-    except StopIteration:
-        pass
-
+def add_edge_sql(conn, _u, _v, ddict):
     keys, values = zip(*ddict.items())
-    add_cols_if_not_exist(conn, keys, values, "edges")
+    add_cols_sql = add_cols_if_not_exist_sql(conn, keys, values, "edges")
 
-    template = "INSERT INTO edges ({}) VALUES ({})"
+    template = "INSERT OR REPLACE INTO edges ({}) VALUES ({});"
     cols_str = ", ".join(["_u", "_v"] + keys)
-    values_str = ", ".join(["?" for v in [_u, _v] + values])
+    values_str = ", ".join(["?" for v in range(len([_u, _v]) + len(values))])
     template = template.format(cols_str, values_str)
-    cursor.execute(template, values)
+    sql = add_cols_sql + "\n" + template
+    return sql
+
+
+def add_edge(conn, _u, _v, ddict):
+    sql = add_edge_sql(conn, _u, _v, ddict)
+    conn.executescript(sql)
     conn.commit()
 
 
-def update_edge(conn, u, v, ddict, reverse=False):
+def update_edge(conn, u, v, ddict):
     if ddict:
-        if reverse:
-            u, v = v, u
-        cursor = conn.cursor()
-
         keys, values = zip(*ddict.items())
-        add_cols_if_not_exist(conn, keys, values, "edges")
+        col_sql = add_cols_if_not_exist_sql(conn, keys, values, "edges")
 
-        template = "UPDATE edges SET {} WHERE _u = ? AND _v = ?"
+        template = "UPDATE edges SET {} WHERE _u = ? AND _v = ?;"
         assignments = ["{} = ?".format(k) for k in keys]
         sql = template.format(", ".join(assignments))
-        values.append(u)
-        values.append(v)
-        cursor.execute(sql, values)
+
+        conn.execute(col_sql)
+        conn.execute(sql, list(values) + [u, v])
         conn.commit()
 
 
-# node_dict_factory_factory: creates node_dict_factories that know about the db
-# connection
+"""Node class and factory."""
 # TODO: use Mapping (mutable?) abstract base class for dict-like magic
-class NodeDB:
-    ignore_cols = ["_key"]
-
-    def _columns(self):
-        # TODO: memoize and/or store as attr, not method
-        cursor = self.conn.cursor()
-        return [c[1] for c in cursor.execute("PRAGMA table_info(nodes)")]
+class Node:
+    def __init__(self, _conn=None, *args, **kwargs):
+        self.conn = _conn
 
     def __getitem__(self, key):
         return get_node(self.conn, key)
@@ -181,25 +172,23 @@ class NodeDB:
             return False
         return True
 
-    def __setitem__(self, key, value):
+    def __setitem__(self, key, ddict):
         if key in self:
-            update_node(self.conn, key, value)
+            update_node(self.conn, key, ddict)
         else:
-            add_node(self.conn, key, value)
+            add_node(self.conn, key, ddict)
 
     def __iter__(self):
-        cursor = self.conn.cursor()
-        query = cursor.execute("SELECT _key FROM nodes")
+        query = self.conn.execute("SELECT _key FROM nodes")
         return (row[0] for row in query)
 
     def __len__(self):
-        cursor = self.conn.cursor()
-        query = cursor.execute("SELECT count(*) FROM nodes")
+        query = self.conn.execute("SELECT count(*) FROM nodes")
         return query.fetchone()[0]
 
 
-def node_dict_factory_factory(conn):
-    """Creates node_dict_factories that know about a shared SQLite connection.
+def node_factory_factory(conn):
+    """Creates factories of DB-based Nodes.
 
     :param conn: An SQLite database connection.
     :type conn: sqlite3.Connection
@@ -208,31 +197,24 @@ def node_dict_factory_factory(conn):
 
     """
 
-    def node_dict_factory():
-        nodes = NodeDB()
-        nodes.conn = conn
+    def node_factory():
+        return Node(_conn=conn)
 
-        return nodes
-
-    return node_dict_factory
+    return node_factory
 
 
+"""Edge class + factory."""
 # FIXME: inherit from MutableMapping abc, might fix various dict compatibility issues
-class EdgeAttr:
+class Edge:
     """Retrieves edge attributes from table, allows direct assignment of values as a
     dict-like.
 
     """
 
-    ignore_cols = ["_u", "_v"]
-
-    def __init__(self, conn=None, u=None, v=None, reverse=False):
-        self.conn = conn
-        self.reverse = reverse
-        if reverse:
-            u, v = v, u
-        self.u = u
-        self.v = v
+    def __init__(self, _conn=None, _u=None, _v=None):
+        self.conn = _conn
+        self.u = _u
+        self.v = _v
         self.delayed_attr = {}
 
     def get(self, key, defaults):
@@ -242,10 +224,7 @@ class EdgeAttr:
             return defaults
 
     def keys(self):
-        if self.reverse:
-            return get_edge_attr(self.conn, self.v, self.u).keys()
-        else:
-            return get_edge_attr(self.conn, self.u, self.v).keys()
+        return get_edge_attr(self.conn, self.u, self.v).keys()
 
     def items(self):
         return get_edge_attr(self.conn, self.u, self.v).items()
@@ -280,23 +259,117 @@ class EdgeAttr:
         return iter(get_edge_attr(self.conn, self.u, self.v))
 
 
-def edge_attr_dict_factory_factory(conn):
-    def edge_attr_dict_factory():
-        edge_data = EdgeAttr(conn)
-        return edge_data
+def edge_factory_factory(conn):
+    def edge_factory():
+        return Edge(conn)
 
-    return edge_attr_dict_factory
+    return edge_factory
 
 
-# adjlist_inner_dict_factory:
+"""Outer adjacency list classes + factories."""
+
+
+class Successors:
+    def __init__(self, _conn=None):
+        self.conn = _conn
+
+    def items(self):
+        query = self.conn.execute("SELECT _u FROM edges")
+        return ((row[0], InnerAdjlist(self.conn, row[0], False)) for row in query)
+
+    def __getitem__(self, key):
+        # Return an atlas view - an inner adjlist
+        return InnerAdjlist(self.conn, key, False)
+
+    def __contains__(self, key):
+        query = self.conn.execute("SELECT * FROM edges WHERE _u = ?", (key,))
+        if query.fetchone() is not None:
+            return True
+        return False
+
+    def __iter__(self):
+        query = self.conn.execute("SELECT DISTINCT _u FROM edges")
+        return (row[0] for row in query)
+
+    def __setitem__(self, key, ddict):
+        # Plan to drop any pre-existing edges using this key.
+        del_sql = "DELETE FROM edges WHERE _u = ?"
+        self.conn.execute(del_sql, (key,))
+        # Create the InnerAdjlist and edges representing the data
+        inserts = []
+        for neighbor, edge_data in ddict.items():
+            inserts.append(add_edge_sql(key, neighbor, edge_data))
+        self.conn.executescript("\n".join(inserts))
+
+
+class Predecessors:
+    def __init__(self, _conn=None):
+        self.conn = _conn
+
+    def items(self):
+        query = self.conn.execute("SELECT _v FROM edges")
+        return ((row[0], InnerAdjlist(self.conn, row[0], True)) for row in query)
+
+    def __getitem__(self, key):
+        # Return an atlas view - an inner adjlist
+        return InnerAdjlist(self.conn, key, True)
+
+    def __contains__(self, key):
+        query = self.conn.execute("SELECT * FROM edges WHERE _v = ?", (key,))
+        if query.fetchone() is not None:
+            return True
+        return False
+
+    def __iter__(self):
+        query = self.conn.execute("SELECT DISTINCT _v FROM edges")
+        return (row[0] for row in query)
+
+    def __setitem__(self, key, ddict):
+        # Plan to drop any pre-existing edges using this key.
+        del_sql = "DELETE FROM edges WHERE _v = ?;"
+        self.conn.execute(del_sql, (key,))
+        # Create the InnerAdjlist and edges representing the data
+        inserts = []
+        for neighbor, edge_data in ddict.items():
+            inserts.append(add_edge_sql(neighbor, key, edge_data))
+        self.conn.executescript("\n".join(inserts))
+
+
+def predecessors_factory_factory(conn):
+    def predecessors_factory():
+        return Predecessors(_conn=conn)
+
+    return predecessors_factory
+
+
+def successors_factory_factory(conn):
+    def successors_factory():
+        return Successors(_conn=conn)
+
+    return successors_factory
+
+
+"""Inner adjacency list class + factory."""
 # TODO: use Mapping abc for better dict compatibility
 class InnerAdjlist:
-    ignore_cols = ["_u", "_v"]
+    """Inner adjacency "list": dict-like keyed by neighbors, values are edge
+    attributes.
 
-    def __init__(self, conn=None, u=None, reverse=False):
-        self.conn = conn
-        self.u = u
-        self.reverse = reverse
+    :param conn: database connection.
+    :type conn: sqlite3.Connection
+    :param key: Key used to access this adjacency "list" - used for lookups.
+    :type key: str
+    :param pred: Whether this adjacency list is a "predecessor" list, as opposed to the
+                 default of containing successors.
+    :type pred: bool
+    """
+
+    def __init__(self, _conn=None, _key=None, _pred=False):
+        self.conn = _conn
+        self.key = _key
+        # TODO: point for optimization: remove conditionals on self.pred at
+        # initialization
+        self.pred = _pred
 
     def get(self, key, defaults):
         try:
@@ -305,222 +378,103 @@ class InnerAdjlist:
             return defaults
 
     def items(self):
-        cursor = self.conn.cursor()
-        if self.reverse:
-            node_col = "_u"
-            where_col = "_v"
-        else:
-            node_col = "_v"
-            where_col = "_u"
-
-        columns = ", ".join([node_col] + self._columns())
-        template = "SELECT {}, {} FROM edges WHERE {} = ?".format(
-            node_col, where_col, where_col
-        )
-        query = cursor.execute(template, (self.u,))
-
-        return (
-            (row[0], EdgeAttr(self.conn, row[0], row[1], self.reverse)) for row in query
-        )
-
-    def _columns(self):
-        # TODO: memoize and/or store as attr, not method
-        # TODO: use ignore_cols here?
-        cursor = self.conn.cursor()
-        columns = []
-        for c in cursor.execute("PRAGMA table_info(edges)"):
-            if c[1] not in self.ignore_cols:
-                columns.append(c[1])
-        return columns
-
-    def __getitem__(self, key):
-        cursor = self.conn.cursor()
-        if self.reverse:
-            query = cursor.execute(
-                "SELECT * FROM edges WHERE _u = ? AND _v = ?", (key, self.u)
+        # TODO: point for optimization: make queries into constants.
+        if self.pred:
+            query = self.conn.execute(
+                "SELECT _v, _u FROM edges WHERE _v = ?", (self.key,)
             )
         else:
-            query = cursor.execute(
-                "SELECT * FROM edges WHERE _u = ? AND _v = ?", (self.u, key)
+            query = self.conn.execute(
+                "SELECT _u, _v FROM edges WHERE _u = ?", (self.key,)
+            )
+        return ((row[1], Edge(self.conn, row[0], row[1])) for row in query)
+
+    def __getitem__(self, key):
+        if self.pred:
+            query = self.conn.execute(
+                "SELECT * FROM edges WHERE _u = ? AND _v = ?", (key, self.key)
+            )
+        else:
+            query = self.conn.execute(
+                "SELECT * FROM edges WHERE _u = ? AND _v = ?", (self.key, key)
             )
 
         if query.fetchone() is not None:
-            return EdgeAttr(self.conn, u=self.u, v=key, reverse=self.reverse)
+            return Edge(self.conn, _u=self.key, _v=key)
         else:
             raise KeyError("No key {}".format(key))
 
     def __setitem__(self, key, value):
-        cursor = self.conn.cursor()
-        columns = self._columns()
         if key in self:
-            update_edge(self.conn, key, self.u, value, reverse=self.reverse)
+            if self.pred:
+                update_edge(self.conn, key, self.key, value)
+            else:
+                update_edge(self.conn, self.key, key, value)
         else:
-            add_edge(self.conn, self.u, key, value, reverse=self.reverse)
+            if self.pred:
+                add_edge(self.conn, key, self.key, value)
+            else:
+                add_edge(self.conn, self.key, key, value)
 
     def __contains__(self, key):
-        cursor = self.conn.cursor()
-        cursor.execute("SELECT * FROM edges WHERE _u = ?", (key,))
+        if self.pred:
+            query = self.conn.execute("SELECT * FROM edges WHERE _v = ?", (key,))
+        else:
+            query = self.conn.execute("SELECT * FROM edges WHERE _u = ?", (key,))
         try:
-            next(cursor)
+            next(query)
         except:
             return False
         return True
 
     def __iter__(self):
-        cursor = self.conn.cursor()
-        if self.reverse:
-            query = cursor.execute("SELECT _u FROM edges WHERE _v = ?", (self.u,))
+        if self.pred:
+            query = self.conn.execute("SELECT _u FROM edges WHERE _v = ?", (self.key,))
         else:
-            query = cursor.execute("SELECT _v FROM edges WHERE _u = ?", (self.u,))
+            query = self.conn.execute("SELECT _v FROM edges WHERE _u = ?", (self.key,))
         return (row[0] for row in query)
 
     def __len__(self):
-        cursor = self.conn.cursor()
-        if self.reverse:
-            query = cursor.execute("SELECT count(*) FROM edges WHERE _v = ?", (self.u,))
+        if self.pred:
+            query = self.conn.execute(
+                "SELECT count(*) FROM edges WHERE _v = ?", (self.key,)
+            )
         else:
-            query = cursor.execute("SELECT count(*) FROM edges WHERE _u = ?", (self.u,))
+            query = self.conn.execute(
+                "SELECT count(*) FROM edges WHERE _u = ?", (self.key,)
+            )
         return query.fetchone()[0]
 
 
 def adjlist_inner_dict_factory_factory(conn):
     def adjlist_inner_dict_factory():
-        adjlist_inner = InnerAdjlist()
-        adjlist_inner.conn = conn
-
-        return adjlist_inner
+        return InnerAdjlist(conn)
 
     return adjlist_inner_dict_factory
 
 
-# adjlist_outer_dict_factory:
-class OuterAdjlist:
-    """
-
-    This could be used for predecessors or successors in the graph - in other words,
-    the 'key' lookup could be for u (pred node ref) or v (end node ref) depending on
-    how NetworkX is internally using the class. NetworkX does not have any documented
-    way of having distinct adjlist classes, so we will implement our own two classes
-    and override __init__ in DiGraph.
-
-    """
-
-    ignore_cols = ["_u", "_v"]
-
-    def __init__(self, reverse=False):
-        self.reverse = reverse
-        if reverse:
-            self.key = "_v"
-        else:
-            self.key = "_u"
-
-    def items(self):
-        cursor = self.conn.cursor()
-        if self.reverse:
-            cols = "_u, _v"
-        else:
-            cols = "_v, _u"
-
-        query = cursor.execute("SELECT {} FROM edges".format(cols))
-
-        return (
-            (row[0], InnerAdjlist(self.conn, u=row[0], reverse=self.reverse))
-            for row in query
-        )
-
-    def _columns(self):
-        # TODO: memoize and/or store as attr, not method
-        # TODO: use ignore_cols here?
-        cursor = self.conn.cursor()
-        return [c[1] for c in cursor.execute("PRAGMA table_info(edges)")]
-
-    def __getitem__(self, key):
-        # Return an atlas view - an inner adjlist
-        # TODO: see if it is practical to use conn and _u in Atlas' __init__
-        inner = InnerAdjlist()
-        inner.conn = self.conn
-        inner.u = key
-        return inner
-
-    def __contains__(self, key):
-        cursor = self.conn.cursor()
-        cursor.execute("SELECT * FROM edges WHERE {} = ?".format(self.key), (key,))
-        if cursor.fetchone() is not None:
-            return True
-        return False
-
-    def __setitem__(self, key, value):
-        """When assigning inner dict-likes to the outer, we want to convert to a
-        'successor' version depending on what type of outer dict-like
-        we have.
-
-        """
-        if self.reverse:
-            value.reverse = True
-
-    def __iter__(self):
-        cursor = self.conn.cursor()
-        if self.reverse:
-            col = "_v"
-        else:
-            col = "_u"
-
-        query = cursor.execute("SELECT {} FROM EDGES".format(col))
-        return (row[0] for row in query)
-
-
-def adjlist_outer_dict_factory_factory(conn):
-    def adjlist_outer_dict_factory():
-        adjlist_outer = OuterAdjlist()
-        adjlist_outer.conn = conn
-
-        return adjlist_outer
-
-    return adjlist_outer_dict_factory
-
-
-def pred_dict_factory_factory(conn):
-    def pred_dict_factory():
-        adjlist_outer = Pred()
-        adjlist_outer.conn = conn
-
-        return adjlist_outer
-
-    return pred_outer_dict_factory
-
-
-def succ_dict_factory_factory(conn):
-    def succ_dict_factory():
-        adjlist_outer = Succ()
-        adjlist_outer.conn = conn
-
-        return adjlist_outer
-
-    return succ_outer_dict_factory
-
-
-class AtlasView:
-    def __init__(self, conn, u):
-        self.conn = conn
-        self.u = u
-
-    def get(self, key, default):
-        try:
-            return self[key]
-        except KeyError:
-            return default
-
-    def __getitem__(self, key):
-        try:
-            return EdgeAttr(self.conn, self.u, key)
-        except MissingEdgeError:
-            return KeyError
-
-    # NOTE: __setitem__ is left undefined on purpose to match NetworkX 2.0 behavior
+# class AtlasView:
+#     def __init__(self, _conn, _u):
+#         self.conn = _conn
+#         self.u = _u
+#
+#     def get(self, key, default):
+#         try:
+#             return self[key]
+#         except KeyError:
+#             return default
+#
+#     def __getitem__(self, key):
+#         try:
+#             return Edge(self.conn, self.u, key)
+#         except MissingEdgeError:
+#             return KeyError
+#
+#     # NOTE: __setitem__ is left undefined on purpose to match NetworkX 2.0 behavior
 
 
 class DiGraphDB(nx.DiGraph):
-    def __init__(self, database=None, create=False, *args, **kwargs):
+    def __init__(self, incoming_graph_data=None, database=None, create=False, **attr):
         if database is None:
             database = tempfile.mkstemp()
         self.database = database
@@ -529,12 +483,20 @@ class DiGraphDB(nx.DiGraph):
             self._create()
 
         # The factories of nx dict-likes need to be informed of the connection
-        self.node_dict_factory = node_dict_factory_factory(self.conn)
-        self.adjlist_outer_dict_factory = adjlist_outer_dict_factory_factory(self.conn)
+        self.node_dict_factory = node_factory_factory(self.conn)
+        self.adjlist_outer_dict_factory = successors_factory_factory(self.conn)
         self.adjlist_inner_dict_factory = adjlist_inner_dict_factory_factory(self.conn)
         self.edge_attr_dict_factory = dict
 
-        super().__init__(*args, **kwargs)
+        self.graph = {}
+        self._node = self.node_dict_factory()
+        self._adj = self.adjlist_outer_dict_factory()
+        self._pred = predecessors_factory_factory(self.conn)()
+        self._succ = self._adj
+
+        if incoming_graph_data is not None:
+            nx.convert.to_networkx_graph(incoming_graph_data, create_using=self)
+        self.graph.update(attr)
 
     def add_edges_from(self, ebunch_to_add, _batch_size=BATCH_SIZE, **attr):
         if _batch_size < 2:
