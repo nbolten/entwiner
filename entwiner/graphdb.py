@@ -73,7 +73,7 @@ class GraphDB:
         data = dict(row)
         data.pop("_u")
         data.pop("_v")
-        return data
+        return {key: value for key, value in data.items() if value is not None}
 
     def add_edge_sql(self, _u, _v, ddict):
         keys, values = zip(*ddict.items())

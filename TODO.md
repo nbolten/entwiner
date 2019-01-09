@@ -16,12 +16,6 @@ The database can be used in several ways:
       web services.
     - Copied to memory and fed into any other graph framework.
 
-# Bugs
-
-## Empty column values should not be None
-There's an awkward interface where sqlite3.Row returns None when coerced to a
-dict-like. These should be dropped, at least optionally.
-
 # Ideas
 
 ## Spin off SQLite-backed networkx graphs

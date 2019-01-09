@@ -507,7 +507,11 @@ class DiGraphDB(nx.DiGraph):
             row = dict(row)
             u = row.pop("_u")
             v = row.pop("_v")
-            yield (u, v, RealizedEdge(**row))
+            yield (
+                u,
+                v,
+                RealizedEdge(**{k: v for k, v in row.items() if v is not None}),
+            )
 
     def _create(self):
         # Create the tables
