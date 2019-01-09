@@ -26,15 +26,9 @@ for k, v in G[START].items():
     print({k1: v1 for k1, v1 in v.items()})
     print("x")
 
-# print(nx.algorithms.centrality.degree_centrality(db))
+# print(nx.algorithms.centrality.degree_centrality(G))
 # deg = G.degree()
 # nx.algorithms.all_pairs_node_connectivity(G)
 
 # print('Importing graph')
 print(len(G))
-
-# @profile
-# def to_nx(G):
-#     return nx.DiGraph(G)
-
-# G2 = to_nx(G)
