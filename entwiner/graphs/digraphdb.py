@@ -110,7 +110,7 @@ class Edge:
         return self.graphdb.get_edge_attr(self.u, self.v).keys()
 
     def items(self):
-        return self.get_edge_attr(self.u, self.v).items()
+        return self.graphdb.get_edge_attr(self.u, self.v).items()
 
     def update(self, attr):
         if self.u is not None and self.v is not None:
