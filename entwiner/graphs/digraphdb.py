@@ -51,6 +51,10 @@ class Node:
     def __init__(self, _graphdb=None, *args, **kwargs):
         self.graphdb = _graphdb
 
+    def clear(self):
+        # FIXME: make this do something
+        pass
+
     def __getitem__(self, key):
         return self.graphdb.get_node(key)
 
@@ -189,6 +193,11 @@ class Successors:
     def __init__(self, _graphdb=None):
         self.graphdb = _graphdb
 
+    def clear(self):
+        # What should this do? Is it safe to drop all rows given that predecessors
+        # might still be defined?
+        pass
+
     def items(self):
         query = self.graphdb.conn.execute("SELECT _u FROM edges")
         return ((row[0], InnerAdjlist(self.graphdb, row[0], False)) for row in query)
@@ -221,6 +230,9 @@ class Successors:
 class Predecessors:
     def __init__(self, _graphdb=None):
         self.graphdb = _graphdb
+
+    def clear(self):
+        pass
 
     def items(self):
         query = self.graphdb.conn.execute("SELECT _v FROM edges")

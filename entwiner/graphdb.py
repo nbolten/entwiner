@@ -30,7 +30,9 @@ class GraphDB:
         self.conn.commit()
 
     def get_node(self, key):
-        query = self.conn.execute("SELECT * FROM nodes WHERE _key = ?", (key,))
+        query = self.conn.execute(
+            "SELECT AsGeoJSON(_geometry) _geometry, * FROM nodes WHERE _key = ?", (key,)
+        )
         data = dict(query.fetchone())
         if data is None:
             raise NodeNotFoundError("Specified node does not exist.")
@@ -65,7 +67,10 @@ class GraphDB:
         self.conn.commit()
 
     def get_edge_attr(self, u, v):
-        query = self.conn.execute("SELECT * FROM edges WHERE _u = ? AND _v = ?", (u, v))
+        query = self.conn.execute(
+            "SELECT AsGeoJSON(_geometry) _geometry, * FROM edges WHERE _u = ? AND _v = ?",
+            (u, v),
+        )
         row = query.fetchone()
         if row is None:
             raise EdgeNotFoundError("No such edge exists.")
