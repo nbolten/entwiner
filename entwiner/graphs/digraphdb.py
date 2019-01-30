@@ -546,4 +546,5 @@ class DiGraphDB(nx.DiGraph):
             conn.execute(
                 "SELECT AddGeometryColumn('edges', '_geometry', 4326, 'LINESTRING')"
             )
+            conn.execute("SELECT CreateSpatialIndex('edges', '_geometry')")
         conn.commit()
