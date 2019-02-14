@@ -1,4 +1,26 @@
+# Bugs
+
+## Extension issue
+
+sqlite3.Connection.load_extension doesn't exist for some users. Figure out why and/or
+just use .execute("SELECT load_extension('whatever.so')")
+
+## Node attributes
+
+Nodes currently lack most attributes, but it's useful to have them for queries and
+filtering (e.g. having node types, compatibility with OSM data, etc.). Add support for
+node attributes.
+
+## Defining node and edge keys
+
+The current strategy uses lon-lat coordinates to uniquely define nodes and edges. This
+seems like a pretty decent way of handling identity, but I can still see it being
+potentially useful to have the option to relabel into integers or associate an `_id`
+column of integers.
+
 # Project Scoping
+
+## Basic
 
 Entwiner is a network library for transportation data that needs to live on disk. It
 can consume various forms of geospatial data - GeoJSON, OpenStreetMap, GTFS, etc. and
@@ -15,6 +37,36 @@ The database can be used in several ways:
     - In combination with the built-in routing engine to do shortest-path analytics and
       web services.
     - Copied to memory and fed into any other graph framework.
+
+## Graph manipulation / joins
+
+### Spatial joins
+
+It is not uncommon to want to join other datasets to a transportation network.
+Examples:
+
+- GTFS and/or other transportation feeds (bus stops, etc.)
+- POIs in general: trees, mailboxes, businesses, etc.
+- GPS data (use something like OpenLR?)
+
+`entwiner` can leverage spatial indices in the database to do fast lookups and
+associations, as well as SQL queries to filter joins. We should add some simple join
+functionality.
+
+### Whole-graph manipulations
+
+There are some pretty common graph manipulations regarding transportation networks:
+
+- Deriving a minor (edges --> nodes)
+    - This includes transforming intersection-to-intersection graphs into a graph of
+    maneuvers (turn right, turn left, etc.)
+
+- Contraction hierarchies
+
+- Other things
+
+These seem like useful manipulations to add to `entwiner` for use by other packages,
+including the AccessMap APIs.
 
 # Ideas
 

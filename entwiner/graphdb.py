@@ -7,6 +7,7 @@ class GraphDB:
         self.path = path
         conn = sqlite3.connect(self.path)
         conn.row_factory = sqlite3.Row
+        conn.enable_load_extension(True)
         conn.load_extension("mod_spatialite.so")
         self.conn = conn
 
