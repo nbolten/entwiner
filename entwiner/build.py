@@ -4,7 +4,7 @@ import os
 from . import graphs, io
 
 
-def create_graph(paths, db_path, precision=7, batch_size=1000):
+def create_graph(paths, db_path, precision=7, batch_size=10000):
     """Create a DiGraphDB from input files.
 
     :param paths: list of file paths to use as inputs. Must be Fiona-compatible.

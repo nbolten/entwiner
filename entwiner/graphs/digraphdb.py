@@ -28,9 +28,9 @@ value column rather than spreading keys into columns and requiring flat data.
 # FIXME: G._pred is not functioning correctly - need a way to distinguish predecessor
 # adjacency dict-like from successor.
 
-BATCH_SIZE = 500
-SQL_PLACEHOLDER = "?"
-GEOM_SQL_PLACEHOLDER = "GeomFromText(?, 4326)"
+BATCH_SIZE = 10000
+PLACEHOLDER = "?"
+GEOM_PLACEHOLDER = "GeomFromText(?, 4326)"
 
 
 class NodeNotFoundError(ValueError):
@@ -430,72 +430,77 @@ class DiGraphDB(nx.DiGraph):
         def add_edges(ebunch, **attr):
             # Inserting one at a time is slow, so do it in a batch - need to iterate over
             # the ebunch once to check for new columns, then insert multiple at a time
-            columns = [c[1] for c in conn.execute("PRAGMA table_info(edges)")]
-            inserts = []
-            updates = []
+            def prepare_data(ebunch, attr):
+                edge_columns = [c[1] for c in conn.execute("PRAGMA table_info(edges)")]
 
-            nodes = set([])
-            seen = set([])
-            for edge in ebunch:
-                if len(edge) == 2:
-                    edge = (edge[0], edge[1], attr)
-                elif len(edge) == 3:
-                    edge = (edge[0], edge[1], {**attr, **edge[2]})
-                else:
-                    raise ValueError(
-                        "Edge must be 2-tuple of (u, v) or 3-tuple of (u, v, d)"
-                    )
-
-                _u, _v, d = edge
-                keys = []
-                values = []
-                placeholders = []
-                for k, v in d.items():
-                    if k not in columns:
-                        col_type = sqlite_type(v)
-                        conn.execute(
-                            "ALTER TABLE edges ADD COLUMN {} {}".format(k, col_type)
-                        )
-                        conn.commit()
-
-                    if k == "_geometry":
-                        placeholders.append(GEOM_SQL_PLACEHOLDER)
+                edges_values = []
+                nodes_values = set([])
+                seen = set([])
+                for edge in ebunch:
+                    if len(edge) == 2:
+                        _u = edge[0]
+                        _v = edge[1]
+                        d = attr
+                    elif len(edge) == 3:
+                        _u = edge[0]
+                        _v = edge[1]
+                        d = {**attr, **edge[2]}
                     else:
-                        placeholders.append(SQL_PLACEHOLDER)
-
-                    columns.append(k)
-                    keys.append(k)
-                    values.append(v)
-
-                query = conn.execute(
-                    "SELECT * FROM edges WHERE _u = ? AND _v = ?", (_u, _v)
-                )
-                if (query.fetchone() is not None) or ((_u, _v) in seen):
-                    updates.append(edge)
-                else:
-                    inserts.append(
-                        (
-                            ["_u", "_v"] + keys,
-                            [_u, _v] + values,
-                            ["?", "?"] + placeholders,
+                        # TODO: this doesn't seem useful. Skip + warn?
+                        raise ValueError(
+                            "Edge must be 2-tuple of (u, v) or 3-tuple of (u, v, d)"
                         )
-                    )
-                seen.add((_u, _v))
-                nodes.add(_u)
-                nodes.add(_v)
 
-            insert_sql = "INSERT INTO edges ({}) VALUES ({})"
-            for qkeys, qvalues, qplaceholders in inserts:
-                keysub = ", ".join(qkeys)
-                placeholdersub = ", ".join(qplaceholders)
-                template = insert_sql.format(keysub, placeholdersub)
-                conn.execute(template, qvalues)
+                    # Check for edge already existing. Skip.
+                    # TODO: Issue a warning?
+                    query = conn.execute(
+                        "SELECT * FROM edges WHERE _u = ? AND _v = ?", (_u, _v)
+                    )
+                    if (query.fetchone() is not None) or ((_u, _v) in seen):
+                        continue
+
+                    # TODO: convert to WKT at this step rather than i/o?
+                    values = []
+                    for c in edge_columns:
+                        try:
+                            value = d.pop(c)
+                        except KeyError:
+                            value = None
+                        values.append(value)
+                    if d:
+                        # There are new columns!
+                        for k, v in d.items():
+                            sqltype = sqlite_type(value)
+                            conn.execute(
+                                "ALTER TABLE edges ADD COLUMN {} {}".format(k, sqltype)
+                            )
+                            conn.commit()
+                            edge_columns.append(k)
+                            values.append(v)
+
+                    edges_values.append(values)
+                    nodes_values.add((_u,))
+                    nodes_values.add((_v,))
+
+                    seen.add((_u, _v))
+
+                return edge_columns, edges_values, nodes_values
+
+            edge_columns, edges_values, nodes_values = prepare_data(ebunch, attr)
+
+            placeholders = [
+                GEOM_PLACEHOLDER if c == "_geometry" else PLACEHOLDER
+                for c in edge_columns
+            ]
+            edges_template = "INSERT OR IGNORE INTO edges ({}) VALUES ({})"
+            edges_sql = edges_template.format(
+                ", ".join(edge_columns), ", ".join(placeholders)
+            )
+            conn.executemany(edges_sql, edges_values)
 
             conn.executemany(
-                "INSERT OR IGNORE INTO nodes (_key) VALUES (?)", [[n] for n in nodes]
+                "INSERT OR IGNORE INTO nodes (_key) VALUES (?)", nodes_values
             )
-
-            conn.commit()
 
         ebunch_iter = iter(ebunch_to_add)
         ebunch = []
@@ -547,4 +552,5 @@ class DiGraphDB(nx.DiGraph):
                 "SELECT AddGeometryColumn('edges', '_geometry', 4326, 'LINESTRING')"
             )
             conn.execute("SELECT CreateSpatialIndex('edges', '_geometry')")
+        conn.execute("ALTER TABLE edges ADD COLUMN _layer text")
         conn.commit()
