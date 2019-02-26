@@ -434,7 +434,7 @@ class DiGraphDB(nx.DiGraph):
                 edge_columns = [c[1] for c in conn.execute("PRAGMA table_info(edges)")]
 
                 edges_values = []
-                nodes_values = set([])
+                nodes_values = []
                 seen = set([])
                 for edge in ebunch:
                     if len(edge) == 2:
@@ -479,8 +479,12 @@ class DiGraphDB(nx.DiGraph):
                             values.append(v)
 
                     edges_values.append(values)
-                    nodes_values.add((_u,))
-                    nodes_values.add((_v,))
+
+                    # TODO: might save some time by not doing redundant node creation
+                    # code (check if the node already exists)
+                    for node in (_u, _v):
+                        node_geom = "POINT(" + " ".join(node.split(", ")) + ")"
+                        nodes_values.append((node, node_geom))
 
                     seen.add((_u, _v))
 
@@ -499,7 +503,8 @@ class DiGraphDB(nx.DiGraph):
             conn.executemany(edges_sql, edges_values)
 
             conn.executemany(
-                "INSERT OR IGNORE INTO nodes (_key) VALUES (?)", nodes_values
+                "INSERT OR IGNORE INTO nodes (_key, _geometry) VALUES (?, GeomFromText(?, 4326))",
+                nodes_values,
             )
 
         ebunch_iter = iter(ebunch_to_add)
@@ -540,10 +545,16 @@ class DiGraphDB(nx.DiGraph):
             next(has_spatial)
         except StopIteration:
             conn.execute("SELECT InitSpatialMetaData(1)")
+        conn.commit()
+        self._create_edge_table()
+        self._create_node_table()
+
+    def _create_edge_table(self):
+        conn = self.graphdb.conn
         conn.execute("DROP TABLE IF EXISTS edges")
-        conn.execute("DROP TABLE IF EXISTS nodes")
-        conn.execute("CREATE TABLE nodes (_key, _geometry text, UNIQUE(_key))")
-        conn.execute("CREATE TABLE edges (_u integer, _v integer, UNIQUE(_u, _v))")
+        conn.execute(
+            "CREATE TABLE edges (_u integer, _v integer, _layer text, UNIQUE(_u, _v))"
+        )
         q = conn.execute(
             "SELECT * FROM geometry_columns WHERE f_table_name = 'edges' AND f_geometry_column = '_geometry'"
         )
@@ -552,5 +563,18 @@ class DiGraphDB(nx.DiGraph):
                 "SELECT AddGeometryColumn('edges', '_geometry', 4326, 'LINESTRING')"
             )
             conn.execute("SELECT CreateSpatialIndex('edges', '_geometry')")
-        conn.execute("ALTER TABLE edges ADD COLUMN _layer text")
+        conn.commit()
+
+    def _create_node_table(self):
+        conn = self.graphdb.conn
+        conn.execute("DROP TABLE IF EXISTS nodes")
+        conn.execute("CREATE TABLE nodes (_key, UNIQUE(_key))")
+        q = conn.execute(
+            "SELECT * FROM geometry_columns WHERE f_table_name = 'nodes' AND f_geometry_column = '_geometry'"
+        )
+        if q.fetchone() is None:
+            conn.execute(
+                "SELECT AddGeometryColumn('nodes', '_geometry', 4326, 'POINT')"
+            )
+            conn.execute("SELECT CreateSpatialIndex('nodes', '_geometry')")
         conn.commit()
