@@ -101,3 +101,16 @@ Python is great for lots of things, but is not particularly fast for implementin
 things like Dijkstra's algorithm. It would be great to have more implementations -
 they'd be faster and would also help enforce standard formatting. e.g. Go or Rust
 implementations of Dijkstra that work on in-memory or on-disk versions of the graph.
+
+# Performance
+
+## Reading files
+
+`entwiner` uses `fiona`, which uses GDAL, to read input files. `fiona` can read nearly
+any GIS format and creates a consistent feature interface. However, it's about 3x
+slower for GeoJSON than using `json.load(file_handle)`, presumably having to do with
+file validation, etc.
+
+For the size of projects the dev is working on, this is not an important issue yet,
+as it's a difference of 4 seconds per build, but it's something to keep an eye on. A
+strategy with no validation on GeoJSON could be offered as a flag?

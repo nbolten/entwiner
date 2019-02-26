@@ -503,7 +503,7 @@ class DiGraphDB(nx.DiGraph):
             try:
                 edge = next(ebunch_to_add)
                 ebunch.append(edge)
-            except StopIteration as e:
+            except StopIteration:
                 add_edges(ebunch, **attr)
                 break
 

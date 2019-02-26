@@ -1,6 +1,5 @@
 """Wraps various readers/writers for different geospatial formats with a focus on
 low-memory reading."""
-import copy
 import os
 
 import fiona
@@ -26,7 +25,7 @@ def edge_generator(path, precision, rev=False):
             )
             yield u, v, props
             if rev:
-                props = copy.deepcopy(props)
+                props = {**props}
                 props["_geometry"] = to_wkt_rev(f["geometry"])
                 yield v, u, props
 
