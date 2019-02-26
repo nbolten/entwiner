@@ -1,3 +1,4 @@
+import json
 import sqlite3
 
 
@@ -31,12 +32,17 @@ class GraphDB:
         self.conn.commit()
 
     def get_node(self, key):
+        # FIXME: if an error happens here during shortest-path, nx.NodeNotFound is
+        # raised. This is not helpful.
         query = self.conn.execute(
             "SELECT AsGeoJSON(_geometry) _geometry, * FROM nodes WHERE _key = ?", (key,)
         )
-        data = dict(query.fetchone())
-        if data is None:
+        row = query.fetchone()
+        if row is None:
             raise NodeNotFoundError("Specified node does not exist.")
+        data = dict(row)
+        if data["_geometry"] is not None:
+            data["_geometry"] = json.loads(data["_geometry"])
         data.pop("_key")
         return data
 
@@ -77,6 +83,8 @@ class GraphDB:
             raise EdgeNotFoundError("No such edge exists.")
 
         data = dict(row)
+        if data["_geometry"] is not None:
+            data["_geometry"] = json.loads(data["_geometry"])
         data.pop("_u")
         data.pop("_v")
         return {key: value for key, value in data.items() if value is not None}
