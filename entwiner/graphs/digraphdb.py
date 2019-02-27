@@ -460,7 +460,7 @@ class DiGraphDB(nx.DiGraph):
                         continue
 
                     # TODO: convert to WKT at this step rather than i/o?
-                    values = []
+                    values = [_u, _v]
                     for c in edge_columns:
                         try:
                             value = d.pop(c)
@@ -469,14 +469,16 @@ class DiGraphDB(nx.DiGraph):
                         values.append(value)
                     if d:
                         # There are new columns!
-                        for k, v in d.items():
+                        for key, value in d.items():
                             sqltype = sqlite_type(value)
                             conn.execute(
-                                "ALTER TABLE edges ADD COLUMN {} {}".format(k, sqltype)
+                                "ALTER TABLE edges ADD COLUMN {} {}".format(
+                                    key, sqltype
+                                )
                             )
                             conn.commit()
-                            edge_columns.append(k)
-                            values.append(v)
+                            edge_columns.append(key)
+                            values.append(value)
 
                     edges_values.append(values)
 
@@ -487,6 +489,8 @@ class DiGraphDB(nx.DiGraph):
                         nodes_values.append((node, node_geom))
 
                     seen.add((_u, _v))
+
+                edge_columns = ["_u", "_v"] + edge_columns
 
                 return edge_columns, edges_values, nodes_values
 

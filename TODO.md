@@ -1,22 +1,25 @@
 # Bugs
 
-## Extension issue
-
-sqlite3.Connection.load_extension doesn't exist for some users. Figure out why and/or
-just use .execute("SELECT load_extension('whatever.so')")
-
 ## Node attributes
 
 Nodes currently lack most attributes, but it's useful to have them for queries and
 filtering (e.g. having node types, compatibility with OSM data, etc.). Add support for
 node attributes.
 
-## Defining node and edge keys
+## (Re-)Defining node and edge keys
 
 The current strategy uses lon-lat coordinates to uniquely define nodes and edges. This
 seems like a pretty decent way of handling identity, but I can still see it being
 potentially useful to have the option to relabel into integers or associate an `_id`
 column of integers.
+
+# Features
+
+## Abstracted spatial index queries
+
+The database can be queried directly via SQL to leverage the built-in spatial indices
+that are automatically created during graph instantiation. Build a wrapper for doing
+queries like bounding box, dwithin, and nearest neighbors.
 
 # Project Scoping
 
