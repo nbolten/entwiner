@@ -1,5 +1,5 @@
 """Reusable sqlite-backed Node container(s)."""
-from .exceptions import NodeNotFound
+from ..exceptions import NodeNotFound
 
 
 class ReadOnlyNode:

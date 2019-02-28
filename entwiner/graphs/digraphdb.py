@@ -4,10 +4,10 @@ import tempfile
 
 import networkx as nx
 
-from .utils import sqlite_type
-from .graphdb import GraphDB
+from ..utils import sqlite_type
+from ..graphdb import GraphDB
+from ..exceptions import ReadOnlyError
 from .edges import Edge, ReadOnlyEdge
-from .exceptions import ReadOnlyError
 from .nodes import node_factory_factory
 
 """
