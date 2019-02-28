@@ -1,6 +1,9 @@
 import json
 import sqlite3
 
+from .utils import sqlite_type
+from .exceptions import EdgeNotFound, NodeNotFound
+
 
 # TODO: generalize to non-sqlite3 DBs
 class GraphDB:
@@ -39,7 +42,7 @@ class GraphDB:
         )
         row = query.fetchone()
         if row is None:
-            raise NodeNotFoundError("Specified node does not exist.")
+            raise NodeNotFound("Specified node does not exist.")
         data = dict(row)
         if data["_geometry"] is not None:
             data["_geometry"] = json.loads(data["_geometry"])
@@ -80,7 +83,7 @@ class GraphDB:
         )
         row = query.fetchone()
         if row is None:
-            raise EdgeNotFoundError("No such edge exists.")
+            raise EdgeNotFound("No such edge exists.")
 
         data = dict(row)
         if data["_geometry"] is not None:

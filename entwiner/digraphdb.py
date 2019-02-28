@@ -5,7 +5,9 @@ import tempfile
 import networkx as nx
 
 from .utils import sqlite_type
-from entwiner.graphdb import GraphDB
+from .graphdb import GraphDB
+from .edges import Edge, RealizedEdge
+from .nodes import Node
 
 """
 NetworkX classes have been written to allow other dict-like storage methods aside from
@@ -33,53 +35,6 @@ PLACEHOLDER = "?"
 GEOM_PLACEHOLDER = "GeomFromText(?, 4326)"
 
 
-class NodeNotFoundError(ValueError):
-    pass
-
-
-class EdgeNotFoundError(ValueError):
-    pass
-
-
-class MissingEdgeError(Exception):
-    pass
-
-
-"""Node class and factory."""
-# TODO: use Mapping (mutable?) abstract base class for dict-like magic
-class Node:
-    def __init__(self, _graphdb=None, *args, **kwargs):
-        self.graphdb = _graphdb
-
-    def clear(self):
-        # FIXME: make this do something
-        pass
-
-    def __getitem__(self, key):
-        return self.graphdb.get_node(key)
-
-    def __contains__(self, key):
-        try:
-            self[key]
-        except NodeNotFoundError:
-            return False
-        return True
-
-    def __setitem__(self, key, ddict):
-        if key in self:
-            self.graphdb.update_node(key, ddict)
-        else:
-            self.graphdb.add_node(key, ddict)
-
-    def __iter__(self):
-        query = self.graphdb.conn.execute("SELECT _key FROM nodes")
-        return (row[0] for row in query)
-
-    def __len__(self):
-        query = self.graphdb.conn.execute("SELECT count(*) FROM nodes")
-        return query.fetchone()[0]
-
-
 def node_factory_factory(graphdb):
     """Creates factories of DB-based Nodes.
     """
@@ -88,95 +43,6 @@ def node_factory_factory(graphdb):
         return Node(_graphdb=graphdb)
 
     return node_factory
-
-
-"""Edge class + factory."""
-# FIXME: inherit from MutableMapping abc, might fix various dict compatibility issues
-class Edge:
-    """Retrieves edge attributes from table, allows direct assignment of values as a
-    dict-like.
-
-    """
-
-    def __init__(self, _graphdb=None, _u=None, _v=None):
-        self.graphdb = _graphdb
-        self.u = _u
-        self.v = _v
-        self.delayed_attr = {}
-
-    def get(self, key, defaults):
-        try:
-            return self[key]
-        except KeyError:
-            return defaults
-
-    def keys(self):
-        return self.graphdb.get_edge_attr(self.u, self.v).keys()
-
-    def items(self):
-        return self.graphdb.get_edge_attr(self.u, self.v).items()
-
-    def update(self, attr):
-        if self.u is not None and self.v is not None:
-            self.graphdb.update_edge(self.u, self.v, attr)
-        else:
-            self.delayed_attr.update(attr)
-
-    def __getitem__(self, key):
-        return self.graphdb.get_edge_attr(self.u, self.v)[key]
-
-    def __setitem__(self, key, value):
-        self.update({key: value})
-
-    def __bool__(self):
-        if self.graphdb.get_edge_attr(self.u, self.v):
-            return True
-        else:
-            return False
-
-    def __iter__(self):
-        return iter(self.graphdb.get_edge_attr(self.u, self.v))
-
-
-class RealizedEdge:
-    """Edge that stores data in a dict, can be initialized in a dict, and syncs to DB.
-
-    """
-
-    def __init__(self, _graphdb=None, _u=None, _v=None, **kwargs):
-        self.graphdb = _graphdb
-        self.u = _u
-        self.v = _v
-        self.dict = dict(**kwargs)
-
-    def get(self, key, defaults):
-        try:
-            return self[key]
-        except KeyError:
-            return defaults
-
-    def keys(self):
-        return self.dict.keys()
-
-    def items(self):
-        return self.dict.items()
-
-    def update(self, attr):
-        self.dict.update(attr)
-        self.graphdb.update_edge(self.u, self.v, attr)
-
-    def __getitem__(self, key):
-        return self.dict[key]
-
-    def __setitem__(self, key, value):
-        self.dict[key] = value
-        self.graphdb.update_edge(self.u, self.v, attr)
-
-    def __bool__(self):
-        return bool(self.dict)
-
-    def __iter__(self):
-        return iter(self.dict)
 
 
 def edge_factory_factory(conn):
@@ -419,6 +285,9 @@ class DiGraphDB(nx.DiGraph):
         self.graph.update(attr)
 
     def add_edges_from(self, ebunch_to_add, _batch_size=BATCH_SIZE, **attr):
+        """We had to override this method in order to add the batch_size param.
+
+        """
         if _batch_size < 2:
             # User has entered invalid number (negative, zero) or 1. Use default behavior.
             super().add_edges_from(self, ebunch_to_add, **attr)
@@ -446,7 +315,8 @@ class DiGraphDB(nx.DiGraph):
                         _v = edge[1]
                         d = {**attr, **edge[2]}
                     else:
-                        # TODO: this doesn't seem useful. Skip + warn?
+                        # TODO: this doesn't seem useful. Skip + warn / raise other
+                        # error?
                         raise ValueError(
                             "Edge must be 2-tuple of (u, v) or 3-tuple of (u, v, d)"
                         )
@@ -461,7 +331,9 @@ class DiGraphDB(nx.DiGraph):
 
                     # TODO: convert to WKT at this step rather than i/o?
                     values = [_u, _v]
-                    for c in edge_columns:
+                    # Skip first two columns - these are _u and _v and we already
+                    # accounted for them
+                    for c in edge_columns[2:]:
                         try:
                             value = d.pop(c)
                         except KeyError:
@@ -490,8 +362,6 @@ class DiGraphDB(nx.DiGraph):
 
                     seen.add((_u, _v))
 
-                edge_columns = ["_u", "_v"] + edge_columns
-
                 return edge_columns, edges_values, nodes_values
 
             edge_columns, edges_values, nodes_values = prepare_data(ebunch, attr)
@@ -510,6 +380,7 @@ class DiGraphDB(nx.DiGraph):
                 "INSERT OR IGNORE INTO nodes (_key, _geometry) VALUES (?, GeomFromText(?, 4326))",
                 nodes_values,
             )
+            conn.commit()
 
         ebunch_iter = iter(ebunch_to_add)
         ebunch = []

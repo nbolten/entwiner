@@ -1,7 +1,7 @@
 """Entwiner build functions - create a graph and populate it from geospatial formats."""
 import os
 
-from . import graphs, io
+from . import io, DiGraphDB
 
 
 def create_graph(paths, db_path, precision=7, batch_size=10000):
@@ -26,7 +26,7 @@ def create_graph(paths, db_path, precision=7, batch_size=10000):
     if os.path.exists(db_path):
         os.rename(db_path, db_path + ".bak")
 
-    G = graphs.digraphdb.DiGraphDB(path=db_path, create=True)
+    G = DiGraphDB(path=db_path, create=True)
 
     for path in paths:
         edge_gen = io.edge_generator(path, precision, rev=True)

@@ -4,9 +4,7 @@ import os
 
 import fiona
 
-
-class UnknownGeometryError(ValueError):
-    pass
+from .exceptions import UnknownGeometry
 
 
 def edge_generator(path, precision, rev=False):
