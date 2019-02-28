@@ -6,8 +6,9 @@ import networkx as nx
 
 from .utils import sqlite_type
 from .graphdb import GraphDB
-from .edges import Edge, RealizedEdge
-from .nodes import Node
+from .edges import Edge, ReadOnlyEdge
+from .exceptions import ReadOnlyError
+from .nodes import node_factory_factory
 
 """
 NetworkX classes have been written to allow other dict-like storage methods aside from
@@ -35,29 +36,10 @@ PLACEHOLDER = "?"
 GEOM_PLACEHOLDER = "GeomFromText(?, 4326)"
 
 
-def node_factory_factory(graphdb):
-    """Creates factories of DB-based Nodes.
-    """
-
-    def node_factory():
-        return Node(_graphdb=graphdb)
-
-    return node_factory
-
-
-def edge_factory_factory(conn):
-    def edge_factory():
-        return Edge(conn)
-
-    return edge_factory
-
-
-"""Outer adjacency list classes + factories."""
-
-
 class Successors:
-    def __init__(self, _graphdb=None):
+    def __init__(self, _graphdb=None, _readonly=False):
         self.graphdb = _graphdb
+        self.readonly = _readonly
 
     def clear(self):
         # What should this do? Is it safe to drop all rows given that predecessors
@@ -66,11 +48,14 @@ class Successors:
 
     def items(self):
         query = self.graphdb.conn.execute("SELECT _u FROM edges")
-        return ((row[0], InnerAdjlist(self.graphdb, row[0], False)) for row in query)
+        return (
+            (row[0], InnerAdjlist(self.graphdb, row[0], False, self.readonly))
+            for row in query
+        )
 
     def __getitem__(self, key):
         # Return an atlas view - an inner adjlist
-        return InnerAdjlist(self.graphdb, key, False)
+        return InnerAdjlist(self.graphdb, key, False, self.readonly)
 
     def __contains__(self, key):
         query = self.graphdb.conn.execute("SELECT * FROM edges WHERE _u = ?", (key,))
@@ -83,6 +68,8 @@ class Successors:
         return (row[0] for row in query)
 
     def __setitem__(self, key, ddict):
+        if self.readonly:
+            raise ReadOnlyError
         # Plan to drop any pre-existing edges using this key.
         del_sql = "DELETE FROM edges WHERE _u = ?"
         self.graphdb.conn.execute(del_sql, (key,))
@@ -94,19 +81,23 @@ class Successors:
 
 
 class Predecessors:
-    def __init__(self, _graphdb=None):
+    def __init__(self, _graphdb=None, _readonly=False):
         self.graphdb = _graphdb
+        self.readonly = _readonly
 
     def clear(self):
         pass
 
     def items(self):
         query = self.graphdb.conn.execute("SELECT _v FROM edges")
-        return ((row[0], InnerAdjlist(self.graphdb, row[0], True)) for row in query)
+        return (
+            (row[0], InnerAdjlist(self.graphdb, row[0], True, self.readonly))
+            for row in query
+        )
 
     def __getitem__(self, key):
         # Return an atlas view - an inner adjlist
-        return InnerAdjlist(self.graphdb, key, True)
+        return InnerAdjlist(self.graphdb, key, True, self.readonly)
 
     def __contains__(self, key):
         query = self.graphdb.conn.execute("SELECT * FROM edges WHERE _v = ?", (key,))
@@ -119,6 +110,8 @@ class Predecessors:
         return (row[0] for row in query)
 
     def __setitem__(self, key, ddict):
+        if self.readonly:
+            raise ReadOnlyError
         # Plan to drop any pre-existing edges using this key.
         del_sql = "DELETE FROM edges WHERE _v = ?;"
         self.graphdb.conn.execute(del_sql, (key,))
@@ -129,18 +122,30 @@ class Predecessors:
         self.graphdb.conn.executescript("\n".join(inserts))
 
 
-def predecessors_factory_factory(graphdb):
+def predecessors_factory_factory(graphdb, readonly=False):
     def predecessors_factory():
-        return Predecessors(_graphdb=graphdb)
+        return Predecessors(_graphdb=graphdb, _readonly=False)
 
-    return predecessors_factory
+    def readonly_predecessors_factory():
+        return Predecessors(_graphdb=graphdb, _readonly=True)
+
+    if readonly:
+        return readonly_predecessors_factory
+    else:
+        return predecessors_factory
 
 
-def successors_factory_factory(graphdb):
+def successors_factory_factory(graphdb, readonly=False):
     def successors_factory():
-        return Successors(_graphdb=graphdb)
+        return Successors(_graphdb=graphdb, _readonly=False)
 
-    return successors_factory
+    def readonly_successors_factory():
+        return Successors(_graphdb=graphdb, _readonly=True)
+
+    if readonly:
+        return readonly_successors_factory
+    else:
+        return successors_factory
 
 
 """Inner adjacency list class + factory."""
@@ -158,12 +163,16 @@ class InnerAdjlist:
     :type pred: bool
     """
 
-    def __init__(self, _graphdb=None, _key=None, _pred=False):
+    def __init__(self, _graphdb=None, _key=None, _pred=False, _readonly=False):
         self.graphdb = _graphdb
         self.key = _key
         # TODO: point for optimization: remove conditionals on self.pred at
         # initialization
         self.pred = _pred
+        if _readonly:
+            self.edge_class = ReadOnlyEdge
+        else:
+            self.edge_class = Edge
 
     def get(self, key, defaults):
         try:
@@ -181,7 +190,10 @@ class InnerAdjlist:
             query = self.graphdb.conn.execute(
                 "SELECT _u, _v FROM edges WHERE _u = ?", (self.key,)
             )
-        return ((row[1], Edge(self.graphdb, row[0], row[1])) for row in query)
+
+        return (
+            (row[1], self.edge_class(self.graphdb, row[0], row[1])) for row in query
+        )
 
     def __getitem__(self, key):
         if self.pred:
@@ -194,7 +206,7 @@ class InnerAdjlist:
             )
 
         if query.fetchone() is not None:
-            return Edge(self.graphdb, _u=self.key, _v=key)
+            return self.edge_class(self.graphdb, _u=self.key, _v=key)
         else:
             raise KeyError("No key {}".format(key))
 
@@ -248,29 +260,46 @@ class InnerAdjlist:
         return query.fetchone()[0]
 
 
-def adjlist_inner_factory_factory(graphdb):
+def adjlist_inner_factory_factory(graphdb, readonly=False):
     def adjlist_inner_factory():
-        return InnerAdjlist(graphdb)
+        return InnerAdjlist(graphdb, _readonly=False)
 
-    return adjlist_inner_factory
+    def readonly_adjlist_inner_factory():
+        return InnerAdjlist(graphdb, _readonly=True)
+
+    if readonly:
+        return readonly_adjlist_inner_factory
+    else:
+        return adjlist_inner_factory
 
 
 class DiGraphDB(nx.DiGraph):
     def __init__(
-        self, incoming_graph_data=None, path=None, graphdb=None, create=False, **attr
+        self,
+        incoming_graph_data=None,
+        path=None,
+        graphdb=None,
+        create=False,
+        readonly=False,
+        **attr
     ):
         if graphdb is None:
             if path is None:
                 n, path = tempfile.mkstemp()
             graphdb = GraphDB(path)
         self.graphdb = graphdb
+        self.readonly = readonly
         if create:
             self._create()
 
         # The factories of nx dict-likes need to be informed of the connection
-        self.node_dict_factory = node_factory_factory(self.graphdb)
-        self.adjlist_outer_dict_factory = successors_factory_factory(self.graphdb)
-        self.adjlist_inner_dict_factory = adjlist_inner_factory_factory(self.graphdb)
+        self.node_dict_factory = node_factory_factory(self.graphdb, readonly=readonly)
+        self.adjlist_outer_dict_factory = successors_factory_factory(
+            self.graphdb, readonly=readonly
+        )
+        self.adjlist_inner_dict_factory = adjlist_inner_factory_factory(
+            self.graphdb, readonly=readonly
+        )
         self.edge_attr_dict_factory = dict
 
         # FIXME: should use a persistent table/container for .graph as well.
@@ -285,9 +314,18 @@ class DiGraphDB(nx.DiGraph):
         self.graph.update(attr)
 
     def add_edges_from(self, ebunch_to_add, _batch_size=BATCH_SIZE, **attr):
-        """We had to override this method in order to add the batch_size param.
+        """Equivalent to add_edges_from in networkx but with batched SQL writes.
+
+        :param ebunch_to_add: edge bunch, identical to nx ebunch_to_add.
+        :type ebunch_to_add: edge bunch
+        :param _batch_size: Number of rows to commit to the database at a time.
+        :type _batch_size: int
+        :param attr: Default attributes, identical to nx attr.
+        :type attr:
 
         """
+        self._check_readonly()
+
         if _batch_size < 2:
             # User has entered invalid number (negative, zero) or 1. Use default behavior.
             super().add_edges_from(self, ebunch_to_add, **attr)
@@ -397,20 +435,24 @@ class DiGraphDB(nx.DiGraph):
                 ebunch = []
 
     def edges_iter(self):
-        """Roughly equivalent to the .edges interface, but much faster."""
+        """Roughly equivalent to the .edges interface, but much faster.
+
+        :returns: generator of (u, v, d) similar to .edges, but where d is a
+                  dictionary, not an Edge that syncs to database.
+        :rtype: tuple generator
+
+        """
         conn = self.graphdb.conn
         query = conn.execute("SELECT * FROM edges")
         for row in query:
             row = dict(row)
             u = row.pop("_u")
             v = row.pop("_v")
-            yield (
-                u,
-                v,
-                RealizedEdge(**{k: v for k, v in row.items() if v is not None}),
-            )
+            yield (u, v, {k: v for k, v in row.items() if v is not None})
 
     def _create(self):
+        self._check_readonly()
+
         # Create the tables
         # FIXME: this is specific to sqlite and spatial data - needs to be isolate
         # into separate class, not general-purpose graph class
@@ -425,6 +467,8 @@ class DiGraphDB(nx.DiGraph):
         self._create_node_table()
 
     def _create_edge_table(self):
+        self._check_readonly()
+
         conn = self.graphdb.conn
         conn.execute("DROP TABLE IF EXISTS edges")
         conn.execute(
@@ -441,6 +485,8 @@ class DiGraphDB(nx.DiGraph):
         conn.commit()
 
     def _create_node_table(self):
+        self._check_readonly()
+
         conn = self.graphdb.conn
         conn.execute("DROP TABLE IF EXISTS nodes")
         conn.execute("CREATE TABLE nodes (_key, UNIQUE(_key))")
@@ -453,3 +499,7 @@ class DiGraphDB(nx.DiGraph):
             )
             conn.execute("SELECT CreateSpatialIndex('nodes', '_geometry')")
         conn.commit()
+
+    def _check_readonly(self):
+        if self.readonly:
+            raise ReadOnlyError("Attempted to modify read-only graph.")

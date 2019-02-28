@@ -11,3 +11,7 @@ class EdgeNotFound(ValueError):
 
 class UnknownGeometry(ValueError):
     pass
+
+
+class ReadOnlyError(Exception):
+    pass
