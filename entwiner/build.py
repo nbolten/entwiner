@@ -33,6 +33,8 @@ def create_graph(paths, db_path, precision=7, batch_size=10000):
         edge_gen = io.edge_generator(path, precision, rev=True)
         G.add_edges_from(edge_gen, _batch_size=batch_size)
 
+    G.reindex()
+
     if os.path.exists(db_path + ".bak"):
         os.remove(db_path + ".bak")
 

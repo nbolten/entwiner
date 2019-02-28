@@ -312,6 +312,9 @@ class DiGraphDB(nx.DiGraph):
         # We should offer a read-only and non-read-only version downstream.
         return self.sqlitegraph.iter_edges()
 
+    def reindex(self):
+        self.sqlitegraph.reindex()
+
     def _create(self):
         self._check_immutable()
         self.sqlitegraph._create_graph()

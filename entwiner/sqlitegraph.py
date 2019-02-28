@@ -29,6 +29,19 @@ class SQLiteGraph:
     def commit(self):
         return self.conn.commit()
 
+    def reindex(self):
+        edges_index = ", ".join(self.get_edges_columns())
+        nodes_index = ", ".join(self.get_nodes_columns())
+        sql = [
+            "DROP INDEX IF EXISTS edges_covering",
+            "CREATE INDEX edges_covering ON edges ({})".format(edges_index),
+            "DROP INDEX IF EXISTS nodes_covering",
+            "CREATE INDEX nodes_covering ON edges ({})".format(nodes_index),
+        ]
+        for s in sql:
+            self.execute(s)
+        self.commit()
+
     def _create_graph(self):
         # Create the tables
         query = self.execute("PRAGMA table_info('spatial_ref_sys')")
@@ -39,11 +52,14 @@ class SQLiteGraph:
         self._create_node_table()
 
     def _create_edge_table(self):
-        self.execute("DROP TABLE IF EXISTS edges")
-        self.execute(
-            "CREATE TABLE edges (_u integer, _v integer, _layer text, UNIQUE(_u, _v))"
-        )
-        self.execute("CREATE INDEX uv ON edges (_u, _v)")
+        # TODO: covering index = faster lookups. Recreate after loading data.
+        sql = [
+            "DROP TABLE IF EXISTS edges",
+            "CREATE TABLE edges (_u integer, _v integer, _layer text, UNIQUE(_u, _v))",
+            "CREATE INDEX edges_uv ON edges (_u, _v)",
+        ]
+        for s in sql:
+            self.execute(s)
         q = self.execute(
             "SELECT * FROM geometry_columns WHERE f_table_name = 'edges' AND f_geometry_column = '_geometry'"
         )
@@ -55,8 +71,13 @@ class SQLiteGraph:
         self.commit()
 
     def _create_node_table(self):
-        self.execute("DROP TABLE IF EXISTS nodes")
-        self.execute("CREATE TABLE nodes (_key, UNIQUE(_key))")
+        sql = [
+            "DROP TABLE IF EXISTS nodes",
+            "CREATE TABLE nodes (_key, UNIQUE(_key))",
+            "CREATE INDEX nodes_key ON nodes (_key)",
+        ]
+        for s in sql:
+            self.execute(s)
         q = self.execute(
             "SELECT * FROM geometry_columns WHERE f_table_name = 'nodes' AND f_geometry_column = '_geometry'"
         )
@@ -117,7 +138,7 @@ class SQLiteGraph:
     def add_node(self, key, ddict=None):
         self.add_nodes((key), ddict)
 
-    def get_edge_columns(self):
+    def get_edges_columns(self):
         return [c[1] for c in self.execute("PRAGMA table_info(edges)")]
 
     def get_edge_attr(self, u, v):
@@ -154,7 +175,7 @@ class SQLiteGraph:
         data.pop("_key")
         return data
 
-    def get_node_columns(self):
+    def get_nodes_columns(self):
         return [c[1] for c in self.execute("PRAGMA table_info(edges)")]
 
     def has_edge(self, u, v):
@@ -377,7 +398,7 @@ class SQLiteGraph:
         # TODO: also return the columns to create, if any, rather than actually
         # creating them in the table. If an error occurs and the edges can't be
         # inserted/updated, the table schema should not be changed.
-        edges_columns = self.get_edge_columns()
+        edges_columns = self.get_edges_columns()
         edges_values = []
         nodes_values = []
         seen = set([])
@@ -462,7 +483,7 @@ class SQLiteGraph:
         # TODO: also return the columns to create, if any, rather than actually
         # creating them in the table. If an error occurs and the edges can't be
         # inserted/updated, the table schema should not be changed.
-        columns = self.get_node_columns()
+        columns = self.get_nodes_columns()
 
         values = []
         seen = set([])
