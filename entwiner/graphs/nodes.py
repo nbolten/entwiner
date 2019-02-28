@@ -3,11 +3,11 @@ from ..exceptions import NodeNotFound
 
 
 class ReadOnlyNode:
-    def __init__(self, _graphdb=None, *args, **kwargs):
-        self.graphdb = _graphdb
+    def __init__(self, _sqlitegraph=None, *args, **kwargs):
+        self.sqlitegraph = _sqlitegraph
 
     def __getitem__(self, key):
-        return self.graphdb.get_node(key)
+        return self.sqlitegraph.get_node(key)
 
     def __contains__(self, key):
         try:
@@ -17,11 +17,11 @@ class ReadOnlyNode:
         return True
 
     def __iter__(self):
-        query = self.graphdb.conn.execute("SELECT _key FROM nodes")
+        query = self.sqlitegraph.conn.execute("SELECT _key FROM nodes")
         return (row[0] for row in query)
 
     def __len__(self):
-        query = self.graphdb.conn.execute("SELECT count(*) FROM nodes")
+        query = self.sqlitegraph.conn.execute("SELECT count(*) FROM nodes")
         return query.fetchone()[0]
 
 
@@ -33,24 +33,24 @@ class Node(ReadOnlyNode):
 
     def __setitem__(self, key, ddict):
         if key in self:
-            self.graphdb.update_node(key, ddict)
+            self.sqlitegraph.update_node(key, ddict)
         else:
-            self.graphdb.add_node(key, ddict)
+            self.sqlitegraph.add_node(key, ddict)
 
 
-def node_factory_factory(graphdb, readonly=False):
+def node_factory_factory(sqlitegraph, readonly=False):
     """Creates factories of DB-based Nodes.
 
-    :param graphdb: Graph database object.
-    :type graphdb: entwiner.GraphDB
+    :param sqlitegraph: Graph database object.
+    :type sqlitegraph: entwiner.GraphDB
 
     """
 
     def node_factory():
-        return Node(_graphdb=graphdb)
+        return Node(_sqlitegraph=sqlitegraph)
 
     def readonly_node_factory():
-        return ReadOnlyNode(_graphdb=graphdb)
+        return ReadOnlyNode(_sqlitegraph=sqlitegraph)
 
     if readonly:
         return readonly_node_factory

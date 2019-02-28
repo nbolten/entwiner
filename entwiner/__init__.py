@@ -1,2 +1,2 @@
 from .graphs.digraphdb import DiGraphDB
-from .graphdb import GraphDB
+from .sqlitegraph import SQLiteGraph

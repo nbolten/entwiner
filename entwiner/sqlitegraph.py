@@ -6,7 +6,7 @@ from .exceptions import EdgeNotFound, NodeNotFound
 
 
 # TODO: generalize to non-sqlite3 DBs
-class GraphDB:
+class SQLiteGraph:
     def __init__(self, path):
         self.path = path
         conn = sqlite3.connect(self.path)

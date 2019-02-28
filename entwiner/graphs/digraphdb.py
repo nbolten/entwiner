@@ -5,7 +5,7 @@ import tempfile
 import networkx as nx
 
 from ..utils import sqlite_type
-from ..graphdb import GraphDB
+from ..sqlitegraph import SQLiteGraph
 from ..exceptions import ReadOnlyError
 from .edges import Edge, ReadOnlyEdge
 from .nodes import node_factory_factory
@@ -37,8 +37,8 @@ GEOM_PLACEHOLDER = "GeomFromText(?, 4326)"
 
 
 class Successors:
-    def __init__(self, _graphdb=None, _readonly=False):
-        self.graphdb = _graphdb
+    def __init__(self, _sqlitegraph=None, _readonly=False):
+        self.sqlitegraph = _sqlitegraph
         self.readonly = _readonly
 
     def clear(self):
@@ -47,24 +47,26 @@ class Successors:
         pass
 
     def items(self):
-        query = self.graphdb.conn.execute("SELECT _u FROM edges")
+        query = self.sqlitegraph.conn.execute("SELECT _u FROM edges")
         return (
-            (row[0], InnerAdjlist(self.graphdb, row[0], False, self.readonly))
+            (row[0], InnerAdjlist(self.sqlitegraph, row[0], False, self.readonly))
             for row in query
         )
 
     def __getitem__(self, key):
         # Return an atlas view - an inner adjlist
-        return InnerAdjlist(self.graphdb, key, False, self.readonly)
+        return InnerAdjlist(self.sqlitegraph, key, False, self.readonly)
 
     def __contains__(self, key):
-        query = self.graphdb.conn.execute("SELECT * FROM edges WHERE _u = ?", (key,))
+        query = self.sqlitegraph.conn.execute(
+            "SELECT * FROM edges WHERE _u = ?", (key,)
+        )
         if query.fetchone() is not None:
             return True
         return False
 
     def __iter__(self):
-        query = self.graphdb.conn.execute("SELECT DISTINCT _u FROM edges")
+        query = self.sqlitegraph.conn.execute("SELECT DISTINCT _u FROM edges")
         return (row[0] for row in query)
 
     def __setitem__(self, key, ddict):
@@ -72,41 +74,43 @@ class Successors:
             raise ReadOnlyError
         # Plan to drop any pre-existing edges using this key.
         del_sql = "DELETE FROM edges WHERE _u = ?"
-        self.graphdb.conn.execute(del_sql, (key,))
+        self.sqlitegraph.conn.execute(del_sql, (key,))
         # Create the InnerAdjlist and edges representing the data
         inserts = []
         for neighbor, edge_data in ddict.items():
             inserts.append(add_edge_sql(key, neighbor, edge_data))
-        self.graphdb.conn.executescript("\n".join(inserts))
+        self.sqlitegraph.conn.executescript("\n".join(inserts))
 
 
 class Predecessors:
-    def __init__(self, _graphdb=None, _readonly=False):
-        self.graphdb = _graphdb
+    def __init__(self, _sqlitegraph=None, _readonly=False):
+        self.sqlitegraph = _sqlitegraph
         self.readonly = _readonly
 
     def clear(self):
         pass
 
     def items(self):
-        query = self.graphdb.conn.execute("SELECT _v FROM edges")
+        query = self.sqlitegraph.conn.execute("SELECT _v FROM edges")
         return (
-            (row[0], InnerAdjlist(self.graphdb, row[0], True, self.readonly))
+            (row[0], InnerAdjlist(self.sqlitegraph, row[0], True, self.readonly))
             for row in query
         )
 
     def __getitem__(self, key):
         # Return an atlas view - an inner adjlist
-        return InnerAdjlist(self.graphdb, key, True, self.readonly)
+        return InnerAdjlist(self.sqlitegraph, key, True, self.readonly)
 
     def __contains__(self, key):
-        query = self.graphdb.conn.execute("SELECT * FROM edges WHERE _v = ?", (key,))
+        query = self.sqlitegraph.conn.execute(
+            "SELECT * FROM edges WHERE _v = ?", (key,)
+        )
         if query.fetchone() is not None:
             return True
         return False
 
     def __iter__(self):
-        query = self.graphdb.conn.execute("SELECT DISTINCT _v FROM edges")
+        query = self.sqlitegraph.conn.execute("SELECT DISTINCT _v FROM edges")
         return (row[0] for row in query)
 
     def __setitem__(self, key, ddict):
@@ -114,20 +118,20 @@ class Predecessors:
             raise ReadOnlyError
         # Plan to drop any pre-existing edges using this key.
         del_sql = "DELETE FROM edges WHERE _v = ?;"
-        self.graphdb.conn.execute(del_sql, (key,))
+        self.sqlitegraph.conn.execute(del_sql, (key,))
         # Create the InnerAdjlist and edges representing the data
         inserts = []
         for neighbor, edge_data in ddict.items():
             inserts.append(add_edge_sql(neighbor, key, edge_data))
-        self.graphdb.conn.executescript("\n".join(inserts))
+        self.sqlitegraph.conn.executescript("\n".join(inserts))
 
 
-def predecessors_factory_factory(graphdb, readonly=False):
+def predecessors_factory_factory(sqlitegraph, readonly=False):
     def predecessors_factory():
-        return Predecessors(_graphdb=graphdb, _readonly=False)
+        return Predecessors(_sqlitegraph=sqlitegraph, _readonly=False)
 
     def readonly_predecessors_factory():
-        return Predecessors(_graphdb=graphdb, _readonly=True)
+        return Predecessors(_sqlitegraph=sqlitegraph, _readonly=True)
 
     if readonly:
         return readonly_predecessors_factory
@@ -135,12 +139,12 @@ def predecessors_factory_factory(graphdb, readonly=False):
         return predecessors_factory
 
 
-def successors_factory_factory(graphdb, readonly=False):
+def successors_factory_factory(sqlitegraph, readonly=False):
     def successors_factory():
-        return Successors(_graphdb=graphdb, _readonly=False)
+        return Successors(_sqlitegraph=sqlitegraph, _readonly=False)
 
     def readonly_successors_factory():
-        return Successors(_graphdb=graphdb, _readonly=True)
+        return Successors(_sqlitegraph=sqlitegraph, _readonly=True)
 
     if readonly:
         return readonly_successors_factory
@@ -163,8 +167,8 @@ class InnerAdjlist:
     :type pred: bool
     """
 
-    def __init__(self, _graphdb=None, _key=None, _pred=False, _readonly=False):
-        self.graphdb = _graphdb
+    def __init__(self, _sqlitegraph=None, _key=None, _pred=False, _readonly=False):
+        self.sqlitegraph = _sqlitegraph
         self.key = _key
         # TODO: point for optimization: remove conditionals on self.pred at
         # initialization
@@ -183,48 +187,48 @@ class InnerAdjlist:
     def items(self):
         # TODO: point for optimization: make queries into constants.
         if self.pred:
-            query = self.graphdb.conn.execute(
+            query = self.sqlitegraph.conn.execute(
                 "SELECT _v, _u FROM edges WHERE _v = ?", (self.key,)
             )
         else:
-            query = self.graphdb.conn.execute(
+            query = self.sqlitegraph.conn.execute(
                 "SELECT _u, _v FROM edges WHERE _u = ?", (self.key,)
             )
 
         return (
-            (row[1], self.edge_class(self.graphdb, row[0], row[1])) for row in query
+            (row[1], self.edge_class(self.sqlitegraph, row[0], row[1])) for row in query
         )
 
     def __getitem__(self, key):
         if self.pred:
-            query = self.graphdb.conn.execute(
+            query = self.sqlitegraph.conn.execute(
                 "SELECT * FROM edges WHERE _u = ? AND _v = ?", (key, self.key)
             )
         else:
-            query = self.graphdb.conn.execute(
+            query = self.sqlitegraph.conn.execute(
                 "SELECT * FROM edges WHERE _u = ? AND _v = ?", (self.key, key)
             )
 
         if query.fetchone() is not None:
-            return self.edge_class(self.graphdb, _u=self.key, _v=key)
+            return self.edge_class(self.sqlitegraph, _u=self.key, _v=key)
         else:
             raise KeyError("No key {}".format(key))
 
     def __setitem__(self, key, value):
         if key in self:
             if self.pred:
-                self.graphdb.update_edge(key, self.key, value)
+                self.sqlitegraph.update_edge(key, self.key, value)
             else:
-                self.graphdb.update_edge(self.key, key, value)
+                self.sqlitegraph.update_edge(self.key, key, value)
         else:
             if self.pred:
-                self.graphdb.add_edge(key, self.key, value)
+                self.sqlitegraph.add_edge(key, self.key, value)
             else:
-                self.graphdb.add_edge(self.key, key, value)
+                self.sqlitegraph.add_edge(self.key, key, value)
 
     def __contains__(self, key):
         if self.pred:
-            query = self.graphdb.conn.execute(
+            query = self.sqlitegraph.conn.execute(
                 "SELECT * FROM edges WHERE _v = ?", (key,)
             )
         else:
@@ -239,33 +243,33 @@ class InnerAdjlist:
 
     def __iter__(self):
         if self.pred:
-            query = self.graphdb.conn.execute(
+            query = self.sqlitegraph.conn.execute(
                 "SELECT _u FROM edges WHERE _v = ?", (self.key,)
             )
         else:
-            query = self.graphdb.conn.execute(
+            query = self.sqlitegraph.conn.execute(
                 "SELECT _v FROM edges WHERE _u = ?", (self.key,)
             )
         return (row[0] for row in query)
 
     def __len__(self):
         if self.pred:
-            query = self.graphdb.conn.execute(
+            query = self.sqlitegraph.conn.execute(
                 "SELECT count(*) FROM edges WHERE _v = ?", (self.key,)
             )
         else:
-            query = self.graphdb.conn.execute(
+            query = self.sqlitegraph.conn.execute(
                 "SELECT count(*) FROM edges WHERE _u = ?", (self.key,)
             )
         return query.fetchone()[0]
 
 
-def adjlist_inner_factory_factory(graphdb, readonly=False):
+def adjlist_inner_factory_factory(sqlitegraph, readonly=False):
     def adjlist_inner_factory():
-        return InnerAdjlist(graphdb, _readonly=False)
+        return InnerAdjlist(sqlitegraph, _readonly=False)
 
     def readonly_adjlist_inner_factory():
-        return InnerAdjlist(graphdb, _readonly=True)
+        return InnerAdjlist(sqlitegraph, _readonly=True)
 
     if readonly:
         return readonly_adjlist_inner_factory
@@ -278,27 +282,29 @@ class DiGraphDB(nx.DiGraph):
         self,
         incoming_graph_data=None,
         path=None,
-        graphdb=None,
+        sqlitegraph=None,
         create=False,
         readonly=False,
         **attr
     ):
-        if graphdb is None:
+        if sqlitegraph is None:
             if path is None:
                 n, path = tempfile.mkstemp()
-            graphdb = GraphDB(path)
-        self.graphdb = graphdb
+            sqlitegraph = SQLiteGraph(path)
+        self.sqlitegraph = sqlitegraph
         self.readonly = readonly
         if create:
             self._create()
 
         # The factories of nx dict-likes need to be informed of the connection
-        self.node_dict_factory = node_factory_factory(self.graphdb, readonly=readonly)
+        self.node_dict_factory = node_factory_factory(
+            self.sqlitegraph, readonly=readonly
+        )
         self.adjlist_outer_dict_factory = successors_factory_factory(
-            self.graphdb, readonly=readonly
+            self.sqlitegraph, readonly=readonly
         )
         self.adjlist_inner_dict_factory = adjlist_inner_factory_factory(
-            self.graphdb, readonly=readonly
+            self.sqlitegraph, readonly=readonly
         )
         self.edge_attr_dict_factory = dict
 
@@ -306,7 +312,7 @@ class DiGraphDB(nx.DiGraph):
         self.graph = {}
         self._node = self.node_dict_factory()
         self._adj = self.adjlist_outer_dict_factory()
-        self._pred = predecessors_factory_factory(self.graphdb)()
+        self._pred = predecessors_factory_factory(self.sqlitegraph)()
         self._succ = self._adj
 
         if incoming_graph_data is not None:
@@ -332,7 +338,7 @@ class DiGraphDB(nx.DiGraph):
             return
 
         # Add multiple edges at once - saves time (1000X+ faster) on inserts
-        conn = self.graphdb.conn
+        conn = self.sqlitegraph.conn
 
         def add_edges(ebunch, **attr):
             # Inserting one at a time is slow, so do it in a batch - need to iterate over
@@ -442,7 +448,7 @@ class DiGraphDB(nx.DiGraph):
         :rtype: tuple generator
 
         """
-        conn = self.graphdb.conn
+        conn = self.sqlitegraph.conn
         query = conn.execute("SELECT * FROM edges")
         for row in query:
             row = dict(row)
@@ -456,7 +462,7 @@ class DiGraphDB(nx.DiGraph):
         # Create the tables
         # FIXME: this is specific to sqlite and spatial data - needs to be isolate
         # into separate class, not general-purpose graph class
-        conn = self.graphdb.conn
+        conn = self.sqlitegraph.conn
         has_spatial = conn.execute("PRAGMA table_info('spatial_ref_sys')")
         try:
             next(has_spatial)
@@ -469,7 +475,7 @@ class DiGraphDB(nx.DiGraph):
     def _create_edge_table(self):
         self._check_readonly()
 
-        conn = self.graphdb.conn
+        conn = self.sqlitegraph.conn
         conn.execute("DROP TABLE IF EXISTS edges")
         conn.execute(
             "CREATE TABLE edges (_u integer, _v integer, _layer text, UNIQUE(_u, _v))"
@@ -487,7 +493,7 @@ class DiGraphDB(nx.DiGraph):
     def _create_node_table(self):
         self._check_readonly()
 
-        conn = self.graphdb.conn
+        conn = self.sqlitegraph.conn
         conn.execute("DROP TABLE IF EXISTS nodes")
         conn.execute("CREATE TABLE nodes (_key, UNIQUE(_key))")
         q = conn.execute(
