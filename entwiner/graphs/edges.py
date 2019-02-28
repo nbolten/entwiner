@@ -1,7 +1,7 @@
 """Reusable, sqlite-backed edge containers"""
 
 
-class ReadOnlyEdge:
+class ImmutableEdge:
     """Retrieves edge attributes from table, does not allow assignment.
 
     """
@@ -87,7 +87,7 @@ class RealizedEdge:
 
 
 # FIXME: inherit from MutableMapping abc, might fix various dict compatibility issues
-class Edge(ReadOnlyEdge):
+class Edge(ImmutableEdge):
     """Retrieves edge attributes from table, allows direct assignment of values as a
     dict-like.
 

@@ -13,5 +13,5 @@ class UnknownGeometry(ValueError):
     pass
 
 
-class ReadOnlyError(Exception):
+class ImmutableGraphError(Exception):
     pass

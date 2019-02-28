@@ -1,7 +1,8 @@
 """Entwiner build functions - create a graph and populate it from geospatial formats."""
 import os
 
-from . import io, DiGraphDB
+from . import io
+from .graphs.digraphdb import DiGraphDB
 
 
 def create_graph(paths, db_path, precision=7, batch_size=10000):

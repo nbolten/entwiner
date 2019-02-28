@@ -2,7 +2,7 @@
 from ..exceptions import NodeNotFound
 
 
-class ReadOnlyNode:
+class ImmutableNode:
     def __init__(self, _sqlitegraph=None, *args, **kwargs):
         self.sqlitegraph = _sqlitegraph
 
@@ -26,7 +26,7 @@ class ReadOnlyNode:
 
 
 # TODO: use Mapping (mutable?) abstract base class for dict-like magic
-class Node(ReadOnlyNode):
+class Node(ImmutableNode):
     def clear(self):
         # FIXME: make this do something
         pass
@@ -38,7 +38,7 @@ class Node(ReadOnlyNode):
             self.sqlitegraph.add_node(key, ddict)
 
 
-def node_factory_factory(sqlitegraph, readonly=False):
+def node_factory_factory(sqlitegraph):
     """Creates factories of DB-based Nodes.
 
     :param sqlitegraph: Graph database object.
@@ -49,10 +49,18 @@ def node_factory_factory(sqlitegraph, readonly=False):
     def node_factory():
         return Node(_sqlitegraph=sqlitegraph)
 
-    def readonly_node_factory():
-        return ReadOnlyNode(_sqlitegraph=sqlitegraph)
+    return node_factory
 
-    if readonly:
-        return readonly_node_factory
-    else:
-        return node_factory
+
+def immutable_node_factory_factory(sqlitegraph):
+    """Creates factories of immutable DB-based Nodes.
+
+    :param sqlitegraph: Graph database object.
+    :type sqlitegraph: entwiner.GraphDB
+
+    """
+
+    def node_factory():
+        return ImmutableNode(_sqlitegraph=sqlitegraph)
+
+    return node_factory
