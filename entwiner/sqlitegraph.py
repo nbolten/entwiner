@@ -61,6 +61,8 @@ class SQLiteGraph:
         sql = [
             "DROP TABLE IF EXISTS edges",
             "CREATE TABLE edges (_u integer, _v integer, _layer text, UNIQUE(_u, _v))",
+            "CREATE INDEX edges_u ON edges (_u)",
+            "CREATE INDEX edges_v ON edges (_v)",
             "CREATE INDEX edges_uv ON edges (_u, _v)",
         ]
         for s in sql:
