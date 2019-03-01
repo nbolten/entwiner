@@ -256,10 +256,10 @@ class SQLiteGraph:
 
         """
         if node is None:
-            query = self.execute("SELECT DISTINCT u FROM edges")
+            query = self.execute("SELECT DISTINCT _u FROM edges")
         else:
-            query = self.execute("SELECT DISTINCT u FROM edges WHERE _v = ?", (node,))
-        return (row[0] for row in query)
+            query = self.execute("SELECT DISTINCT _u FROM edges WHERE _v = ?", (node,))
+        return (row["_u"] for row in query)
 
     def iter_predecessors(self, node):
         """Create an iterable of all predecessors edges of a given node.
