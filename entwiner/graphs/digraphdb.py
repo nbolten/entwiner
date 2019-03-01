@@ -74,9 +74,9 @@ class Predecessors:
         pass
 
     def items(self):
-        query = self.sqlitegraph.conn.execute("SELECT _v FROM edges")
+        query = self.sqlitegraph.conn.execute("SELECT _v v FROM edges")
         return (
-            (row[0], InnerAdjlist(self.sqlitegraph, row[0], True, self.immutable))
+            (row["v"], InnerAdjlist(self.sqlitegraph, row["v"], True, self.immutable))
             for row in query
         )
 
@@ -88,8 +88,8 @@ class Predecessors:
         return self.sqlitegraph.has_predecessors(key)
 
     def __iter__(self):
-        query = self.sqlitegraph.conn.execute("SELECT DISTINCT _v FROM edges")
-        return (row[0] for row in query)
+        query = self.sqlitegraph.conn.execute("SELECT DISTINCT _v v FROM edges")
+        return (row["v"] for row in query)
 
     def __setitem__(self, key, ddict):
         if self.immutable:
@@ -208,18 +208,18 @@ class InnerAdjlist:
             query = self.sqlitegraph.conn.execute(
                 "SELECT _v FROM edges WHERE _u = ?", (self.key,)
             )
-        return (row[0] for row in query)
+        return (row["_v"] for row in query)
 
     def __len__(self):
         if self.pred:
             query = self.sqlitegraph.conn.execute(
-                "SELECT count(*) FROM edges WHERE _v = ?", (self.key,)
+                "SELECT count(*) count FROM edges WHERE _v = ?", (self.key,)
             )
         else:
             query = self.sqlitegraph.conn.execute(
-                "SELECT count(*) FROM edges WHERE _u = ?", (self.key,)
+                "SELECT count(*) count FROM edges WHERE _u = ?", (self.key,)
             )
-        return query.fetchone()[0]
+        return query.fetchone()["count"]
 
 
 def adjlist_inner_factory_factory(sqlitegraph, immutable=False):

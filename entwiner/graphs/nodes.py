@@ -18,11 +18,11 @@ class ImmutableNode:
 
     def __iter__(self):
         query = self.sqlitegraph.conn.execute("SELECT _key FROM nodes")
-        return (row[0] for row in query)
+        return (row["_key"] for row in query)
 
     def __len__(self):
-        query = self.sqlitegraph.conn.execute("SELECT count(*) FROM nodes")
-        return query.fetchone()[0]
+        query = self.sqlitegraph.conn.execute("SELECT count(*) count FROM nodes")
+        return query.fetchone()["count"]
 
 
 # TODO: use Mapping (mutable?) abstract base class for dict-like magic

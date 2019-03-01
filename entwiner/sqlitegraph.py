@@ -14,8 +14,13 @@ class SQLiteGraph:
         self.conn = self.connect()
 
     def connect(self):
+        def dict_factory(cursor, row):
+            # TODO: evaluate performance overhead of doing non-null check here
+            return {col[0]: row[idx] for idx, col in enumerate(cursor.description)}
+
         conn = sqlite3.connect(self.path)
-        conn.row_factory = sqlite3.Row
+        conn.row_factory = dict_factory
+        # conn.row_factory = sqlite3.Row
         conn.enable_load_extension(True)
         conn.load_extension("mod_spatialite.so")
         return conn
@@ -139,44 +144,42 @@ class SQLiteGraph:
         self.add_nodes((key), ddict)
 
     def get_edges_columns(self):
-        return [c[1] for c in self.execute("PRAGMA table_info(edges)")]
+        return [c["name"] for c in self.execute("PRAGMA table_info(edges)")]
 
     def get_edge_attr(self, u, v):
         q = self.execute(
-            "SELECT AsGeoJSON(_geometry) _geometry, * FROM edges WHERE _u = ? AND _v = ?",
+            "SELECT *, AsGeoJSON(_geometry) _geometry FROM edges WHERE _u = ? AND _v = ?",
             (u, v),
         )
         row = q.fetchone()
         if row is None:
             raise EdgeNotFound("No such edge exists.")
 
-        data = dict(row)
-
         # Create GeoJSON-like of the geometry
-        if data["_geometry"] is not None:
-            data["_geometry"] = json.loads(data["_geometry"])
+        if row["_geometry"] is not None:
+            row["_geometry"] = json.loads(row["_geometry"])
 
         # Get rid of implementation details
-        data.pop("_u")
-        data.pop("_v")
+        row.pop("_u")
+        row.pop("_v")
 
-        return {key: value for key, value in data.items() if value is not None}
+        return {key: value for key, value in row.items() if value is not None}
 
     def get_node(self, key):
         # FIXME: if an error happens here during shortest-path, nx.NodeNotFound is
         # raised. This is not helpful.
-        sql = "SELECT AsGeoJSON(_geometry) _geometry, * FROM nodes WHERE _key = ?"
+        # sql = "SELECT AsGeoJSON(_geometry) _geometry, * FROM nodes WHERE _key = ?"
+        sql = "SELECT *, AsGeoJSON(_geometry) _geometry FROM nodes WHERE _key = ?"
         row = self.execute(sql, (key,)).fetchone()
         if row is None:
             raise NodeNotFound("Specified node does not exist.")
-        data = dict(row)
-        if data["_geometry"] is not None:
-            data["_geometry"] = json.loads(data["_geometry"])
-        data.pop("_key")
-        return data
+        if row["_geometry"] is not None:
+            row["_geometry"] = json.loads(row["_geometry"])
+        row.pop("_key")
+        return row
 
     def get_nodes_columns(self):
-        return [c[1] for c in self.execute("PRAGMA table_info(edges)")]
+        return [c["name"] for c in self.execute("PRAGMA table_info(edges)")]
 
     def has_edge(self, u, v):
         """Test whether an edge exists in the table.
@@ -222,7 +225,9 @@ class SQLiteGraph:
         :returns: Generator of edge IDs.
         :rtype: iterable of (str, str) tuples
         """
-        return ((row[0], row[1]) for row in self.execute("SELECT u, v FROM edges"))
+        return (
+            (row["_u"], row["_v"]) for row in self.execute("SELECT _u, _v FROM edges")
+        )
 
     def iter_edges(self):
         """Create a fast, iterable ebunch (generator of (u, v, d) tuples). The output
@@ -295,7 +300,7 @@ class SQLiteGraph:
             query = self.execute("SELECT DISTINCT _v FROM edges")
         else:
             query = self.execute("SELECT DISTINCT _v FROM edges WHERE _u = ?", (node,))
-        return (row[0] for row in query)
+        return (row["_v"] for row in query)
 
     def iter_successors(self, node):
         """Create an iterable of all successor edges of a given node.
