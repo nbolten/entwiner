@@ -11,9 +11,16 @@ BATCH_SIZE = 10000
 @click.argument("infiles", nargs=-1, type=click.Path("r"))
 @click.argument("outfile")
 @click.option("--precision", default=7)
-def entwiner(infiles, outfile, precision):
+@click.option("--changes-sign", multiple=True)
+def entwiner(infiles, outfile, precision, changes_sign):
     click.echo("Creating database and importing edges...")
-    build.create_graph(infiles, outfile, precision=precision, batch_size=BATCH_SIZE)
+    build.create_graph(
+        infiles,
+        outfile,
+        precision=precision,
+        batch_size=BATCH_SIZE,
+        changes_sign=changes_sign,
+    )
     click.echo("Done!")
 
 

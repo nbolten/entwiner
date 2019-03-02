@@ -5,7 +5,7 @@ from . import io
 from .graphs.digraphdb import DiGraphDB
 
 
-def create_graph(paths, db_path, precision=7, batch_size=10000):
+def create_graph(paths, db_path, precision=7, batch_size=10000, changes_sign=None):
     """Create a DiGraphDB from input files.
 
     :param paths: list of file paths to use as inputs. Must be Fiona-compatible.
@@ -30,7 +30,9 @@ def create_graph(paths, db_path, precision=7, batch_size=10000):
     G = DiGraphDB(path=db_path, create=True)
 
     for path in paths:
-        edge_gen = io.edge_generator(path, precision, rev=True)
+        edge_gen = io.edge_generator(
+            path, precision, rev=True, changes_sign=changes_sign
+        )
         G.add_edges_from(edge_gen, _batch_size=batch_size)
 
     G.reindex()

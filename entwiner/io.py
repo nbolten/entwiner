@@ -7,8 +7,10 @@ import fiona
 from .exceptions import UnknownGeometry
 
 
-def edge_generator(path, precision, rev=False):
+def edge_generator(path, precision, rev=False, changes_sign=None):
     layer = os.path.splitext(os.path.basename(path))[0]
+    if changes_sign is None:
+        changes_sign = []
     with fiona.open(path) as handle:
         for f in handle:
             props = dict(f["properties"])
@@ -25,6 +27,9 @@ def edge_generator(path, precision, rev=False):
             if rev:
                 props = {**props}
                 props["_geometry"] = to_wkt_rev(f["geometry"])
+                for change_sign in changes_sign:
+                    if change_sign in props:
+                        props[change_sign] = -1 * props[change_sign]
                 yield v, u, props
 
 
