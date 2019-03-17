@@ -455,6 +455,10 @@ class SQLiteGraph:
                     edges_columns.append(key)
                     values.append(value)
 
+                    # Update previously-batched values, too! Need to add Nones
+                    for vs in edges_values:
+                        vs.append(None)
+
             edges_values.append(values)
 
             # TODO: might save some time by not doing redundant node creation

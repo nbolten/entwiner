@@ -13,9 +13,10 @@ def edge_generator(path, precision, rev=False, changes_sign=None):
         changes_sign = []
     with fiona.open(path) as handle:
         for f in handle:
-            props = dict(f["properties"])
+            props = {k: v for k, v in f["properties"].items() if v is not None}
             props["_geometry"] = to_wkt(f["geometry"])
             props["_layer"] = layer
+            props = {k: v for k, v in props.items() if v is not None}
 
             u = ", ".join(
                 [str(round(c, precision)) for c in f["geometry"]["coordinates"][0]]
