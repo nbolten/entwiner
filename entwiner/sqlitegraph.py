@@ -379,13 +379,48 @@ class SQLiteGraph:
         if not ddict:
             return
 
-        cols, values = self._prepare_edges((u, v, ddict), nodes=False)
+        # Note: this is just used to create the column type(s) for the new entries
+        edges_columns = self.get_edges_columns()
+        for key, value in ddict.items():
+            if key not in edges_columns:
+                sqltype = sqlite_type(value)
+                self.execute("ALTER TABLE edges ADD COLUMN {} {}".format(key, sqltype))
+                self.commit()
+
+        cols, values = list(zip(*ddict.items()))
 
         template = "UPDATE edges SET {} WHERE _u = ? AND _v = ?"
         assignments = ", ".join([c + "=?" for c in cols])
         sql = template.format(assignments)
 
         self.execute(sql, list(values) + [u, v])
+        self.commit()
+
+    def update_edges(self, ebunch):
+        """Update a bunch of edges at once. Update means the u, v IDs already exist and
+           only the attributes need to be updated / created. Calls UPDATE in SQL.
+
+        """
+        edges_columns = self.get_edges_columns()
+        for u, v, d in ebunch:
+            # Add any missing column types based on first occurrence
+            for key, value in d.items():
+                if key not in edges_columns:
+                    sqltype = sqlite_type(value)
+                    self.execute(
+                        "ALTER TABLE edges ADD COLUMN {} {}".format(key, sqltype)
+                    )
+                    self.commit()
+                    edges_columns.append(key)
+
+        template = "UPDATE edges SET {} WHERE _u = ? AND _v = ?"
+
+        for u, v, d in ebunch:
+            cols, values = list(zip(*d.items()))
+            assignments = ", ".join([c + "=?" for c in cols])
+            sql = template.format(assignments)
+            self.execute(sql, list(values) + [u, v])
+
         self.commit()
 
     def update_node(self, key, ddict):
@@ -454,10 +489,6 @@ class SQLiteGraph:
                     self.commit()
                     edges_columns.append(key)
                     values.append(value)
-
-                    # Update previously-batched values, too! Need to add Nones
-                    for vs in edges_values:
-                        vs.append(None)
 
             edges_values.append(values)
 
