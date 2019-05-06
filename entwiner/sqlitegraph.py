@@ -170,7 +170,6 @@ class SQLiteGraph:
     def get_node(self, key):
         # FIXME: if an error happens here during shortest-path, nx.NodeNotFound is
         # raised. This is not helpful.
-        # sql = "SELECT AsGeoJSON(_geometry) _geometry, * FROM nodes WHERE _key = ?"
         sql = "SELECT *, AsGeoJSON(_geometry) _geometry FROM nodes WHERE _key = ?"
         row = self.execute(sql, (key,)).fetchone()
         if row is None:
@@ -240,13 +239,37 @@ class SQLiteGraph:
         :rtype: iterable of (str, str, dict-like)
 
         """
-        sql = "SELECT AsGeoJSON(_geometry) _geometry, * FROM edges"
+        sql = "SELECT *, AsGeoJSON(_geometry) _geometry FROM edges"
         for row in self.execute(sql):
             d = {k: v for k, v in row.items() if v is not None}
             u = d.pop("_u")
             v = d.pop("_v")
 
             yield (u, v, d)
+
+    def iter_nodes(self):
+        """Create a fast, iterable nbunch (generator of (n, d) tuples). The output
+        can be used directly as an input for new graphs, including in-memory networkx
+        graph instances.
+
+        :returns: Generator of node data (n, d).
+        :rtype: iterable of (str, dict-like)
+
+        """
+        sql = "SELECT *,  AsGeoJSON(_geometry) _geometry FROM nodes"
+        for row in self.execute(sql):
+            d = {k: v for k, v in row.items() if v is not None}
+            n = d.pop("_key")
+
+            yield (n, d)
+
+    def iter_node_ids(self):
+        """Create an iterable of node IDs.
+
+        :returns: Generator of node IDs.
+        :rtype: iterable of str
+        """
+        return (r[0] for r in self.execute("SELECT DISTINCT _key FROM nodes"))
 
     def iter_predecessor_ids(self, node=None):
         """Create an iterable of all predecessor node IDs: all nodes that are the
@@ -270,7 +293,7 @@ class SQLiteGraph:
         :type node: str
 
         """
-        sql = "SELECT AsGeoJSON(_geometry) _geometry, * FROM edges WHERE _v = ?"
+        sql = "SELECT *, AsGeoJSON(_geometry) _geometry FROM edges WHERE _v = ?"
 
         query = self.execute(sql, (node,))
 
@@ -280,14 +303,6 @@ class SQLiteGraph:
             u = row.pop("_u")
             row.pop("_v")
             yield (u, row)
-
-    def iter_node_ids(self):
-        """Create an iterable of node IDs.
-
-        :returns: Generator of node IDs.
-        :rtype: iterable of str
-        """
-        return (r[0] for r in self.execute("SELECT DISTINCT _key FROM nodes"))
 
     def iter_successor_ids(self, node=None):
         """Create an iterable of all successor node IDs: all nodes that are the
@@ -314,7 +329,7 @@ class SQLiteGraph:
 
         """
         query = self.execute(
-            "SELECT AsGeoJSON(_geometry) _geometry, * FROM edges WHERE _u = ?", (node,)
+            "SELECT *, AsGeoJSON(_geometry) _geometry FROM edges WHERE _u = ?", (node,)
         )
         for row in query:
             # TODO: This is inefficient. Instead, ask for the columns we want rather
