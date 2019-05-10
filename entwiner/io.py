@@ -4,34 +4,43 @@ import os
 
 import fiona
 
-from .exceptions import UnknownGeometry
+from .exceptions import UnknownGeometry, UnrecognizedFileFormat
 
 
 def edge_generator(path, precision, rev=False, changes_sign=None):
     layer = os.path.splitext(os.path.basename(path))[0]
     if changes_sign is None:
         changes_sign = []
-    with fiona.open(path) as handle:
-        for f in handle:
-            props = {k: v for k, v in f["properties"].items() if v is not None}
-            props["_geometry"] = to_wkt(f["geometry"])
-            props["_layer"] = layer
-            props = {k: v for k, v in props.items() if v is not None}
 
-            u = ", ".join(
-                [str(round(c, precision)) for c in f["geometry"]["coordinates"][0]]
-            )
-            v = ", ".join(
-                [str(round(c, precision)) for c in f["geometry"]["coordinates"][-1]]
-            )
-            yield u, v, props
-            if rev:
-                props = {**props}
-                props["_geometry"] = to_wkt_rev(f["geometry"])
-                for change_sign in changes_sign:
-                    if change_sign in props:
-                        props[change_sign] = -1 * props[change_sign]
-                yield v, u, props
+    def edge_from_feature(feature):
+        props = {k: v for k, v in f["properties"].items() if v is not None}
+        props["_geometry"] = to_wkt(f["geometry"])
+        props["_layer"] = layer
+        props = {k: v for k, v in props.items() if v is not None}
+
+        u = ", ".join(
+            [str(round(c, precision)) for c in f["geometry"]["coordinates"][0]]
+        )
+        v = ", ".join(
+            [str(round(c, precision)) for c in f["geometry"]["coordinates"][-1]]
+        )
+
+        return u, v, props
+
+    try:
+        with fiona.open(path) as handle:
+            for f in handle:
+                u, v, props = edge_from_feature(f)
+                yield u, v, props
+                if rev:
+                    props = {**props}
+                    props["_geometry"] = to_wkt_rev(f["geometry"])
+                    for change_sign in changes_sign:
+                        if change_sign in props:
+                            props[change_sign] = -1 * props[change_sign]
+                    yield v, u, props
+    except fiona.errors.DriverError:
+        raise UnrecognizedFileFormat("{} has an unrecognized format.".format(path))
 
 
 def to_wkt(geom):

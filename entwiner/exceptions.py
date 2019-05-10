@@ -1,6 +1,10 @@
 """Reusable package-level exceptions."""
 
 
+class UnrecognizedFileFormat(ValueError):
+    pass
+
+
 class NodeNotFound(ValueError):
     pass
 
