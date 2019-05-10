@@ -504,6 +504,10 @@ class SQLiteGraph:
                     self.commit()
                     edges_columns.append(key)
                     values.append(value)
+                    # Account for previous edge data that now has to have the same
+                    # number of arguments on the insert command
+                    for previous_values in edges_values:
+                        previous_values.append(None)
 
             edges_values.append(values)
 
