@@ -47,7 +47,7 @@ def to_wkt(geom):
     type_map = {"LineString": "LINESTRING"}
     geom_type = type_map.get(geom["type"], None)
     if geom_type is None:
-        raise UnknownGeometryError()
+        raise UnknownGeometry()
 
     coords = ", ".join(
         [" ".join([str(p) for p in coord]) for coord in geom["coordinates"]]
