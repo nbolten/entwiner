@@ -30,6 +30,10 @@ def edge_generator(path, precision, rev=False, changes_sign=None):
     try:
         with fiona.open(path) as handle:
             for f in handle:
+                # TODO: log total number of edges skipped and inform user.
+                # TODO: split MultiLineStrings into multiple LineStrings?
+                if f["geometry"]["type"] != "LineString":
+                    continue
                 u, v, props = edge_from_feature(f)
                 yield u, v, props
                 if rev:
@@ -44,24 +48,14 @@ def edge_generator(path, precision, rev=False, changes_sign=None):
 
 
 def to_wkt(geom):
-    type_map = {"LineString": "LINESTRING"}
-    geom_type = type_map.get(geom["type"], None)
-    if geom_type is None:
-        raise UnknownGeometry()
-
     coords = ", ".join(
         [" ".join([str(p) for p in coord]) for coord in geom["coordinates"]]
     )
-    return "{}({})".format(geom_type, coords)
+    return "LINESTRING({})".format(coords)
 
 
 def to_wkt_rev(geom):
-    type_map = {"LineString": "LINESTRING"}
-    geom_type = type_map.get(geom["type"], None)
-    if geom_type is None:
-        raise UnknownGeometryError()
-
     coords = ", ".join(
         [" ".join([str(p) for p in coord]) for coord in geom["coordinates"][::-1]]
     )
-    return "{}({})".format(geom_type, coords)
+    return "LINESTRING({})".format(coords)
