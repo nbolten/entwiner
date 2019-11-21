@@ -155,6 +155,15 @@ class ImmutableInnerAdjlist:
         else:
             return self.sqlitegraph.iter_successors(self.key)
 
+    def values(self):
+        # TODO: check if this is actually immutable - can the Edges be mutated?
+        if self.pred:
+            edge_ids = self.sqlitegraph.iter_predecessor_ids(self.key)
+            return (Edge(self.sqlitegraph, self.key, e) for e in edge_ids)
+        else:
+            edge_ids = self.sqlitegraph.iter_successor_ids(self.key)
+            return (Edge(self.sqlitegraph, e, self.key) for e in edge_ids)
+
     def __getitem__(self, key):
         if self.pred:
             return self.sqlitegraph.get_edge_attr(key, self.key)
@@ -235,6 +244,14 @@ class InnerAdjlist(ImmutableInnerAdjlist):
                 self.sqlitegraph.add_edge(key, self.key, value)
             else:
                 self.sqlitegraph.add_edge(self.key, key, value)
+
+    def values(self):
+        if self.pred:
+            edge_ids = self.sqlitegraph.iter_predecessor_ids(self.key)
+            return (Edge(self.sqlitegraph, self.key, e) for e in edge_ids)
+        else:
+            edge_ids = self.sqlitegraph.iter_successor_ids(self.key)
+            return (Edge(self.sqlitegraph, e, self.key) for e in edge_ids)
 
     # TODO: implement mutable __iter__
 
@@ -354,6 +371,14 @@ class DiGraphDB(nx.DiGraph):
             return
 
         self.sqlitegraph.add_edges_batched(ebunch_to_add, _batch_size)
+
+    def size(self, weight=None):
+        if weight is None:
+            query_results = self.sqlitegraph.execute("SELECT count() FROM edges")
+            count = next(query_results)["count()"]
+            return count
+        else:
+            return super().size(weight=weight)
 
     def iter_edges(self):
         """Roughly equivalent to the .edges interface, but much faster.
