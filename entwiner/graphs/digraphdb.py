@@ -16,9 +16,7 @@ the default, which is a plain Python dict. All one needs to do (in theory) is cr
 a few functions that can be used to generate those dict-like objects - a few factories.
 
 Because our implementation requires storing/retrieving graph information from an SQLite
-database, the factories need to have access to a shared database connection (the
-:memory: SQLite option creates a new db each time - we need to share a single
-connection).
+database, the factories need to have access to a shared database connection.
 
 In other words, we need to embed potentially dynamic information into a factory: we
 need factories of factories that take the database connection as an input.
@@ -306,12 +304,15 @@ class DiGraphDB(nx.DiGraph):
         sqlitegraph=None,
         create=False,
         immutable=False,
+        in_memory=False,
         **attr
     ):
         if sqlitegraph is None:
             if path is None:
                 n, path = tempfile.mkstemp()
             sqlitegraph = SQLiteGraph(path)
+        if in_memory:
+            sqlitegraph = sqlitegraph.to_in_memory()
         self.sqlitegraph = sqlitegraph
         self.immutable = immutable
         if create:

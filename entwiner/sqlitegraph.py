@@ -13,17 +13,54 @@ class SQLiteGraph:
         self.path = path
         self.conn = self.connect()
 
-    def connect(self):
-        def dict_factory(cursor, row):
-            # TODO: evaluate performance overhead of doing non-null check here
-            return {col[0]: row[idx] for idx, col in enumerate(cursor.description)}
+    @staticmethod
+    def _dict_factory(cursor, row):
+        # TODO: evaluate performance overhead of doing non-null check here
+        return {col[0]: row[idx] for idx, col in enumerate(cursor.description)}
 
+    def connect(self):
         conn = sqlite3.connect(self.path)
-        conn.row_factory = dict_factory
+        conn.row_factory = self._dict_factory
         # conn.row_factory = sqlite3.Row
         conn.enable_load_extension(True)
         conn.load_extension("mod_spatialite.so")
         return conn
+
+    def to_in_memory(self):
+        # Load into new memory-based DB
+        new_db = SQLiteGraph(":memory:")
+        # Replace database connection with clean one so that values can be directly
+        # dumped.
+        new_db.conn = sqlite3.connect(":memory:")
+        new_db.conn.enable_load_extension(True)
+        new_db.conn.load_extension("mod_spatialite.so")
+
+        # TODO: include a cleanup that ensures the row factory is restored even in
+        # to-memory fails?
+        row_factory = self.conn.row_factory
+        self.conn.row_factory = None
+
+        for line in self.conn.iterdump():
+            # Skip all index creation - these should be recreated afterwards
+            if "CREATE TABLE" in line or "INSERT INTO" in line:
+                if "idx_" in line:
+                    continue
+            if "COMMIT" in line:
+                continue
+            new_db.conn.cursor().executescript(line)
+            new_db.conn.commit()
+        self.conn.row_factory = row_factory
+
+        new_db.conn.execute(
+            "SELECT RecoverGeometryColumn('edges', '_geometry', 4326, 'LINESTRING')"
+        )
+        new_db.conn.execute("SELECT DisableSpatialIndex('edges', '_geometry')")
+        new_db.conn.execute("DROP TABLE IF EXISTS idx_edges__geometry")
+        new_db.conn.execute("SELECT CreateSpatialIndex('edges', '_geometry')")
+
+        new_db.conn.row_factory = row_factory
+
+        return new_db
 
     def execute(self, sql, values=()):
         return self.conn.execute(sql, values)
