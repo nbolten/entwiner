@@ -54,6 +54,7 @@ class SQLiteGraph:
         new_db.conn.execute(
             "SELECT RecoverGeometryColumn('edges', '_geometry', 4326, 'LINESTRING')"
         )
+        # FIXME: Not necessary?
         new_db.conn.execute("SELECT DisableSpatialIndex('edges', '_geometry')")
         new_db.conn.execute("DROP TABLE IF EXISTS idx_edges__geometry")
         new_db.conn.execute("SELECT CreateSpatialIndex('edges', '_geometry')")
