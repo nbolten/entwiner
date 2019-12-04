@@ -157,10 +157,10 @@ class ImmutableInnerAdjlist:
         # TODO: check if this is actually immutable - can the Edges be mutated?
         if self.pred:
             edge_ids = self.sqlitegraph.iter_predecessor_ids(self.key)
-            return (Edge(self.sqlitegraph, self.key, e) for e in edge_ids)
+            return (Edge(self.sqlitegraph, e, self.key) for e in edge_ids)
         else:
             edge_ids = self.sqlitegraph.iter_successor_ids(self.key)
-            return (Edge(self.sqlitegraph, e, self.key) for e in edge_ids)
+            return (Edge(self.sqlitegraph, self.key, e) for e in edge_ids)
 
     def __getitem__(self, key):
         if self.pred:
@@ -215,10 +215,10 @@ class InnerAdjlist(ImmutableInnerAdjlist):
     def items(self):
         if self.pred:
             edge_ids = self.sqlitegraph.iter_predecessor_ids(self.key)
-            return ((e, Edge(self.sqlitegraph, self.key, e)) for e in edge_ids)
+            return ((e, Edge(self.sqlitegraph, e, self.key)) for e in edge_ids)
         else:
             edge_ids = self.sqlitegraph.iter_successor_ids(self.key)
-            return ((e, Edge(self.sqlitegraph, e, self.key)) for e in edge_ids)
+            return ((e, Edge(self.sqlitegraph, self.key, e)) for e in edge_ids)
 
     def __getitem__(self, key):
         if self.pred:
@@ -246,10 +246,10 @@ class InnerAdjlist(ImmutableInnerAdjlist):
     def values(self):
         if self.pred:
             edge_ids = self.sqlitegraph.iter_predecessor_ids(self.key)
-            return (Edge(self.sqlitegraph, self.key, e) for e in edge_ids)
+            return (Edge(self.sqlitegraph, e, self.key) for e in edge_ids)
         else:
             edge_ids = self.sqlitegraph.iter_successor_ids(self.key)
-            return (Edge(self.sqlitegraph, e, self.key) for e in edge_ids)
+            return (Edge(self.sqlitegraph, self.key, e) for e in edge_ids)
 
     # TODO: implement mutable __iter__
 
