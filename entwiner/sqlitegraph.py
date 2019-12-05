@@ -1,6 +1,8 @@
 import json
 import sqlite3
 
+from shapely.geometry import shape, Point
+
 from .utils import sqlite_type
 from .exceptions import EdgeNotFound, NodeNotFound
 
@@ -649,3 +651,53 @@ class SQLiteGraph:
         if self.execute(sql, values).fetchone() is not None:
             return True
         return False
+
+    def edges_dwithin(self, lon, lat, distance, sort=False):
+        """Finds edges within some distance of a point.
+
+        :param lon: The longitude of the query point.
+        :type lon: float
+        :param lat: The latitude of the query point.
+        :type lat: float
+        :param distance: distance from point to search ('DWithin').
+        :type distance: float
+        :param sort: Sort the results by distance (nearest first).
+        :type sort: bool
+        :returns: Generator of copies of edge data (represented as dicts).
+        :rtype: generator of dicts
+
+        """
+        # TODO: use legit distance and/or projected data, not lon-lat
+        rtree_sql = """
+            SELECT rowid
+              FROM SpatialIndex
+             WHERE f_table_name = 'edges'
+               AND search_frame = BuildMbr(?, ?, ?, ?, 4326)
+        """
+        point = Point(lon, lat)
+
+        bbox = [lon - distance, lat - distance, lon + distance, lat + distance]
+
+        index_query = self.execute(rtree_sql, bbox)
+        rowids = [str(r["rowid"]) for r in index_query]
+
+        # TODO: put fast rowid-based lookup in G.sqlitegraph object.
+        query = self.execute(
+            """
+            SELECT rowid, *, AsGeoJSON(_geometry) _geometry
+              FROM edges
+             WHERE rowid IN ({})
+        """.format(
+                ", ".join(rowids)
+            )
+        )
+
+        if sort:
+            return sorted(query, key=lambda r: _distance_sort(r, point))
+
+        return (r for r in query)
+
+
+def _distance_sort(row, point):
+    geometry = shape(json.loads(r["_geometry"]))
+    return geometry.distance(point)

@@ -406,3 +406,6 @@ class DiGraphDB(nx.DiGraph):
     def _check_immutable(self):
         if self.immutable:
             raise ImmutableGraphError("Attempted to modify read-only/immutable graph.")
+
+    def edges_dwithin(self, lon, lat, distance, sort=False):
+        return self.sqlitegraph.edges_dwithin(lon, lat, distance, sort=sort)
