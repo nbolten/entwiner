@@ -19,3 +19,7 @@ class UnknownGeometry(ValueError):
 
 class ImmutableGraphError(Exception):
     pass
+
+
+class UninitializedEdgeError(Exception):
+    pass

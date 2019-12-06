@@ -353,7 +353,7 @@ class DiGraphDB(nx.DiGraph):
             nx.convert.to_networkx_graph(incoming_graph_data, create_using=self)
         self.graph.update(attr)
 
-    def add_edges_from(self, ebunch_to_add, _batch_size=10000, **attr):
+    def add_edges_from(self, ebunch_to_add, _batch_size=1000, counter=None, **attr):
         """Equivalent to add_edges_from in networkx but with batched SQL writes.
 
         :param ebunch_to_add: edge bunch, identical to nx ebunch_to_add.
@@ -371,7 +371,7 @@ class DiGraphDB(nx.DiGraph):
             super().add_edges_from(self, ebunch_to_add, **attr)
             return
 
-        self.sqlitegraph.add_edges_batched(ebunch_to_add, _batch_size)
+        self.sqlitegraph.add_edges_batched(ebunch_to_add, _batch_size, counter=counter)
 
     def size(self, weight=None):
         if weight is None:
