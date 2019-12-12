@@ -16,8 +16,8 @@ class ImmutableEdge(Mapping):
 
     """
 
-    def __init__(self, sqlitegraph=None, _u=None, _v=None):
-        self.sqlitegraph = sqlitegraph
+    def __init__(self, _sqlitegraph=None, _u=None, _v=None):
+        self.sqlitegraph = _sqlitegraph
         self.u = _u
         self.v = _v
 
@@ -44,7 +44,7 @@ class Edge(MutableMapping):
 
     """
 
-    def __init__(self, sqlitegraph=None, _u=None, _v=None):
+    def __init__(self, _sqlitegraph=None, _u=None, _v=None):
         self.sqlitegraph = sqlitegraph
         self.u = _u
         self.v = _v
