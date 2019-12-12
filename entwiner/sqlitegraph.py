@@ -9,7 +9,7 @@ from .exceptions import EdgeNotFound, NodeNotFound
 PLACEHOLDER = "?"
 GEOM_PLACEHOLDER = "GeomFromText(?, 4326)"
 
-# TODO: generalize to non-sqlite3 DBs
+
 class SQLiteGraph:
     def __init__(self, path):
         self.path = path

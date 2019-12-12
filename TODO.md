@@ -41,6 +41,9 @@ The database can be used in several ways:
       web services.
     - Copied to memory and fed into any other graph framework.
 
+Consider allowing other database backends by using a library like `peewee` or
+`sqlalchemy`.
+
 ## Graph manipulation / joins
 
 ### Spatial joins
