@@ -14,7 +14,7 @@ def edge_generator(path, precision, rev=False, changes_sign=None):
 
     def edge_from_feature(feature):
         props = {k: v for k, v in f["properties"].items() if v is not None}
-        props["_geometry"] = to_wkt(f["geometry"])
+        props["_geometry"] = f["geometry"]
         props["_layer"] = layer
         props = {k: v for k, v in props.items() if v is not None}
 
@@ -38,7 +38,9 @@ def edge_generator(path, precision, rev=False, changes_sign=None):
                 yield u, v, props
                 if rev:
                     props = {**props}
-                    props["_geometry"] = to_wkt_rev(f["geometry"])
+                    props["_geometry"] = reverse_linestring(
+                        f["geometry"]["coordinates"]
+                    )
                     for change_sign in changes_sign:
                         if change_sign in props:
                             props[change_sign] = -1 * props[change_sign]
@@ -47,15 +49,5 @@ def edge_generator(path, precision, rev=False, changes_sign=None):
         raise UnrecognizedFileFormat("{} has an unrecognized format.".format(path))
 
 
-def to_wkt(geom):
-    coords = ", ".join(
-        [" ".join([str(p) for p in coord]) for coord in geom["coordinates"]]
-    )
-    return "LINESTRING({})".format(coords)
-
-
-def to_wkt_rev(geom):
-    coords = ", ".join(
-        [" ".join([str(p) for p in coord]) for coord in geom["coordinates"][::-1]]
-    )
-    return "LINESTRING({})".format(coords)
+def reverse_linestring(coords):
+    return {"type": "LineString", "coordinates": list(reversed(coords))}

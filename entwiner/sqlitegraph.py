@@ -3,6 +3,7 @@ import sqlite3
 
 from shapely.geometry import shape, Point
 
+from .geom import wkt_linestring, wkt_point
 from .utils import sqlite_type
 from .exceptions import EdgeNotFound, NodeNotFound
 
@@ -36,7 +37,6 @@ class SQLiteGraph:
         return self.conn.commit()
 
     def reindex(self):
-        # TODO: create 'quoted column' helper method.
         edges_index = _sql_column_list(self.get_columns("edges"))
         nodes_index = _sql_column_list(self.get_columns("nodes"))
         self.execute("DROP INDEX IF EXISTS edges_covering")
@@ -91,13 +91,13 @@ class SQLiteGraph:
 
     def _create_edge_table(self):
         # TODO: covering index = faster lookups. Recreate after loading data.
-        sql = [
+        sql = (
             "DROP TABLE IF EXISTS edges",
             "CREATE TABLE edges (_u integer, _v integer, _layer text, UNIQUE(_u, _v))",
             "CREATE INDEX edges_u ON edges (_u)",
             "CREATE INDEX edges_v ON edges (_v)",
             "CREATE UNIQUE INDEX edges_uv ON edges (_u, _v)",
-        ]
+        )
         for s in sql:
             self.execute(s)
         q = self.execute(
@@ -111,11 +111,11 @@ class SQLiteGraph:
         self.commit()
 
     def _create_node_table(self):
-        sql = [
+        sql = (
             "DROP TABLE IF EXISTS nodes",
             "CREATE TABLE nodes (_n, UNIQUE(_n))",
             "CREATE INDEX nodes_n ON nodes (_n)",
-        ]
+        )
         for s in sql:
             self.execute(s)
         q = self.execute(
@@ -130,23 +130,13 @@ class SQLiteGraph:
 
     def insert_or_replace_edge(self, u, v, d, commit=False):
         cols, vals = zip(*d.items())
-        cols = ["_u", "_v", *cols]
+        cols = ("_u", "_v", *cols)
 
         placeholders = _sql_column_placeholders(cols)
         columns_string = _sql_column_list(cols)
-        vals = [u, v, *vals]
+        vals = (u, v, *vals)
         sql = f"REPLACE INTO edges ({columns_string}) VALUES ({placeholders})"
         self.execute(sql, vals, commit=commit)
-
-    # FIXME: allow arbitrary creation of new node from string ID with data
-    def insert_or_ignore_node(self, node_string, commit=False):
-        lon, lat = node_string.split(", ")
-        node_geom = f"POINT({lon} {lat})"
-        sql = f"INSERT OR IGNORE INTO nodes (_n, _geometry) VALUES (?, GeomFromText(?, 4326))"
-        self.execute(sql, (node_string, node_geom))
-
-        if commit:
-            self.commit()
 
     def add_edges(self, ebunch, **attr):
         for edge in ebunch:
@@ -162,10 +152,27 @@ class SQLiteGraph:
                     "Edge must be 2-tuple of (u, v) or 3-tuple of (u, v, d)"
                 )
 
+            if "_geometry" in d:
+                # Convert to wkt strings for insertion
+                # TODO: create forward/reverse serialization methods that are
+                # reusable.
+                lon_u, lat_u = d["_geometry"]["coordinates"][0]
+                lon_v, lat_v = d["_geometry"]["coordinates"][-1]
+                u_wkt = wkt_point(lon_u, lat_u)
+                v_wkt = wkt_point(lon_v, lat_v)
+                d["_geometry"] = wkt_linestring(d["_geometry"]["coordinates"])
+
             self._add_columns_if_new_keys("edges", d, commit=False)
             self.insert_or_replace_edge(u, v, d, commit=False)
-            self.insert_or_ignore_node(u, commit=False)
-            self.insert_or_ignore_node(v, commit=False)
+
+            # TODO: allow overriding node IDs during insert of edges, e.g. when
+            # they are already stored as attributes in OpenStreetMap way data.
+            if "_geometry" in d:
+                self.add_node(u, ndict={"_geometry": u_wkt}, commit=False)
+                self.add_node(v, ndict={"_geometry": v_wkt}, commit=False)
+            else:
+                self.add_node(u, commit=False)
+                self.add_node(v, commit=False)
 
         self.commit()
 
@@ -191,6 +198,19 @@ class SQLiteGraph:
                     counter.update(batch_size)
                 ebunch = []
 
+    def add_node(self, n, ndict=None, commit=True):
+        keys, values = zip(*ndict.items())
+
+        columns = _sql_column_list(("_n", *keys))
+        placeholders = _sql_column_placeholders((n, *keys))
+        values = (n, *values)
+
+        sql = f"REPLACE INTO nodes ({columns}) VALUES ({placeholders})"
+        self.execute(sql, values)
+
+        if commit:
+            self.commit()
+
     def add_nodes(self, nbunch, **attr):
         for n in nbunch:
             if type(n) == str:
@@ -202,11 +222,7 @@ class SQLiteGraph:
                 if attr:
                     ndict = {**attr, **ndict}
 
-            keys, values = ndict.items()
-            columns = self._insert_cols_string(("_n", *keys))
-            placeholders = _sql_column_placeholders((n, *keys))
-            sql = f"REPLACE INTO nodes ({columns_string}) VALUES ({placeholders})"
-            self.execute(sql)
+            self.add_node(n, ndict, commit=False)
 
         self.commit()
 
@@ -225,11 +241,8 @@ class SQLiteGraph:
                 self.add_nodes(nbunch, **attr)
                 nbunch = []
 
-    def add_node(self, n, ddict=None):
-        self.add_nodes((n,), **ddict)
-
     def get_columns(self, table_name):
-        return [c["name"] for c in self.execute(f"PRAGMA table_info({table_name})")]
+        return list(c["name"] for c in self.execute(f"PRAGMA table_info({table_name})"))
 
     def get_edge_attr(self, u, v):
         q = self.execute(
@@ -513,7 +526,7 @@ class SQLiteGraph:
 
         sql = f"UPDATE edges SET {key}=? WHERE _u = ? AND _v = ?"
 
-        self.execute(sql, [value, u, v])
+        self.execute(sql, (value, u, v))
         self.commit()
 
     def update_edge(self, u, v, ddict, commit=True):
@@ -521,10 +534,10 @@ class SQLiteGraph:
             return
 
         self._add_columns_if_new_keys(self, "edges", ddict)
-        cols, values = list(zip(*ddict.items()))
+        cols, values = zip(*ddict.items())
 
         sql = self._update_edge_sql(cols)
-        self.execute(sql, list(values) + [u, v])
+        self.execute(sql, (*values, u, v))
         if commit:
             self.commit()
 
@@ -599,10 +612,10 @@ class SQLiteGraph:
         """
         point = Point(lon, lat)
 
-        bbox = [lon - distance, lat - distance, lon + distance, lat + distance]
+        bbox = (lon - distance, lat - distance, lon + distance, lat + distance)
 
         index_query = self.execute(rtree_sql, bbox)
-        rowids = ", ".join([str(r["rowid"]) for r in index_query])
+        rowids = ", ".join(str(r["rowid"]) for r in index_query)
 
         # TODO: put fast rowid-based lookup in G.sqlitegraph object.
         query = self.execute(
@@ -624,7 +637,7 @@ def _dict_factory(cursor, row):
 
 
 def _sql_column_list(columns):
-    return ", ".join([f"'{c}'" for c in columns])
+    return ", ".join(f"'{c}'" for c in columns)
 
 
 def _sql_set_column_list(columns):
