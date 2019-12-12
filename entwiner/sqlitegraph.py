@@ -17,7 +17,6 @@ class SQLiteGraph:
 
     @staticmethod
     def _dict_factory(cursor, row):
-        # TODO: evaluate performance overhead of doing non-null check here
         return {col[0]: row[idx] for idx, col in enumerate(cursor.description)}
 
     def connect(self):
@@ -37,8 +36,6 @@ class SQLiteGraph:
         new_db.conn.enable_load_extension(True)
         new_db.conn.load_extension("mod_spatialite.so")
 
-        # TODO: include a cleanup that ensures the row factory is restored even in
-        # to-memory fails?
         row_factory = self.conn.row_factory
         self.conn.row_factory = None
 
@@ -79,13 +76,32 @@ class SQLiteGraph:
 
     def reindex(self):
         # TODO: create 'quoted column' helper method.
-        edges_index = ", ".join([f"'{c}'" for c in self.get_columns("edges")])
-        nodes_index = ", ".join([f"'{c}'" for c in self.get_columns("nodes")])
+        edges_index = self._sql_column_list(self.get_columns("edges"))
+        nodes_index = self._sql_column_list(self.get_columns("nodes"))
         self.execute("DROP INDEX IF EXISTS edges_covering")
         self.execute(f"CREATE INDEX edges_covering ON edges ({edges_index})")
         self.execute("DROP INDEX IF EXISTS nodes_covering")
         self.execute(f"CREATE INDEX nodes_covering ON nodes ({nodes_index})")
         self.commit()
+
+    @staticmethod
+    def _sql_column_list(columns):
+        return ", ".join([f"'{c}'" for c in columns])
+
+    @staticmethod
+    def _sql_set_column_list(columns):
+        return ", ".join(
+            [
+                f"'{c}'={GEOM_PLACEHOLDER if c == '_geometry' else PLACEHOLDER}"
+                for c in columns
+            ]
+        )
+
+    @staticmethod
+    def _sql_column_placeholders(columns):
+        return ", ".join(
+            GEOM_PLACEHOLDER if c == "_geometry" else PLACEHOLDER for c in columns
+        )
 
     def _create_graph(self):
         # Create the tables
@@ -138,10 +154,9 @@ class SQLiteGraph:
     def insert_or_replace_edge(self, u, v, d, commit=False):
         cols, vals = zip(*d.items())
         cols = ["_u", "_v", *cols]
-        placeholders = ", ".join(
-            GEOM_PLACEHOLDER if c == "_geometry" else PLACEHOLDER for c in cols
-        )
-        columns_string = ", ".join([f"'{c}'" for c in cols])
+
+        placeholders = self._sql_column_placeholders(cols)
+        columns_string = self._sql_column_list(cols)
         vals = [u, v, *vals]
         sql = f"REPLACE INTO edges ({columns_string}) VALUES ({placeholders})"
         self.execute(sql, vals, commit=commit)
@@ -210,9 +225,7 @@ class SQLiteGraph:
 
         columns_string = self._insert_cols_string(keys)
 
-        placeholders = [
-            GEOM_PLACEHOLDER if k == "_geometry" else PLACEHOLDER for k in keys
-        ]
+        placeholders = self._sql_column_placeholders(keys)
         sql = f"REPLACE INTO nodes ({columns_string}) VALUES ({placeholders})"
         self.execute(sql, values)
 
@@ -495,13 +508,13 @@ class SQLiteGraph:
 
     @staticmethod
     def _update_edge_sql(cols):
-        column_template = ", ".join([f"'{c}'=?" for c in cols])
+        column_template = _sql_set_column_list(columns)
         sql = f"UPDATE edges SET {column_template} WHERE _u = ? AND _v = ?"
         return sql
 
     @staticmethod
     def _update_node_sql(cols):
-        column_template = ", ".join([f"'{c}'=?" for c in cols])
+        column_template = _sql_set_column_list(columns)
         sql = f"UPDATE nodes SET {column_template} WHERE _node = ?"
         return sql
 
@@ -584,7 +597,8 @@ class SQLiteGraph:
             # code (check if the node already exists)
             if nodes:
                 for node in (u, v):
-                    node_geom = "POINT(" + " ".join(node.split(", ")) + ")"
+                    coords_string = " ".join(node.split(", "))
+                    node_geom = f"POINT({coords_string})"
                     nodes_values.append((node, node_geom))
 
             seen.add((u, v))
@@ -599,13 +613,10 @@ class SQLiteGraph:
             ebunch, nodes=True, **attr
         )
 
-        placeholders = [
-            GEOM_PLACEHOLDER if c == "_geometry" else PLACEHOLDER for c in edges_columns
-        ]
+        placeholders = self._sql_column_placeholders(keys)
         columns_string = self._insert_cols_string(edges_columns)
-        values_string = ", ".join(placeholders)
         edges_sql = (
-            f"INSERT OR IGNORE INTO edges ({columns_string}) VALUES ({values_string})"
+            f"INSERT OR IGNORE INTO edges ({columns_string}) VALUES ({placeholders})"
         )
 
         return edges_sql, edges_values, nodes_values
@@ -663,12 +674,10 @@ class SQLiteGraph:
     def _prepare_nodes_insert(self, nbunch, **attr):
         nodes_columns, nodes_values = self._prepare_nodes(ebunch, **attr)
 
-        placeholders = [
-            GEOM_PLACEHOLDER if c == "_geometry" else PLACEHOLDER for c in nodes_columns
-        ]
-        nodes_template = "INSERT OR IGNORE INTO nodes ({}) VALUES ({})"
-        nodes_sql = nodes_template.format(
-            ", ".join([f"'{c}'" for c in nodes_columns]), ", ".join(placeholders)
+        columns = self._sql_columns_list(nodes_columns)
+        placeholders = self._sql_column_placeholders(keys)
+        nodes_template = (
+            f"INSERT OR IGNORE INTO nodes ({columns}) VALUES ({placeholders})"
         )
 
         return nodes_sql, nodes_values
@@ -725,17 +734,15 @@ class SQLiteGraph:
         bbox = [lon - distance, lat - distance, lon + distance, lat + distance]
 
         index_query = self.execute(rtree_sql, bbox)
-        rowids = [str(r["rowid"]) for r in index_query]
+        rowids = ", ".join([str(r["rowid"]) for r in index_query])
 
         # TODO: put fast rowid-based lookup in G.sqlitegraph object.
         query = self.execute(
-            """
+            f"""
             SELECT rowid, *, AsGeoJSON(_geometry) _geometry
               FROM edges
-             WHERE rowid IN ({})
-        """.format(
-                ", ".join(rowids)
-            )
+             WHERE rowid IN ({rowids})
+        """
         )
 
         if sort:
