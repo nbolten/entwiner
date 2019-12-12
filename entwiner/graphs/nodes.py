@@ -1,4 +1,6 @@
 """Reusable sqlite-backed Node container(s)."""
+import networkx as nx
+
 from ..exceptions import NodeNotFound
 
 
@@ -7,7 +9,10 @@ class ImmutableNode:
         self.sqlitegraph = _sqlitegraph
 
     def __getitem__(self, key):
-        return self.sqlitegraph.get_node(key)
+        try:
+            return self.sqlitegraph.get_node(key)
+        except NodeNotFound:
+            raise nx.NodeNotFound
 
     def __contains__(self, key):
         try:

@@ -257,8 +257,6 @@ class SQLiteGraph:
         return {key: value for key, value in row.items() if value is not None}
 
     def get_node(self, key):
-        # FIXME: if an error happens here during shortest-path, nx.NodeNotFound is
-        # raised. This is not helpful.
         sql = "SELECT *, AsGeoJSON(_geometry) _geometry FROM nodes WHERE _key = ?"
         row = self.execute(sql, (key,)).fetchone()
         if row is None:
