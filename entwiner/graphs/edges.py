@@ -7,8 +7,8 @@ from entwiner.exceptions import ImmutableGraphError
 class ImmutableEdge(Mapping):
     """Retrieves edge attributes from table, but does not allow assignment.
 
-    :param sqlitegraph: The SQLite-backed graph class.
-    :type sqlitegraph: entwiner.SqliteGraph
+    :param _sqlitegraph: The SQLite-backed graph class.
+    :type _sqlitegraph: entwiner.SqliteGraph
     :param _u: Incoming node.
     :type _u: str
     :param _v: Outgoing node.

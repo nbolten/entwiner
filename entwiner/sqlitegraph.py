@@ -15,17 +15,35 @@ class SQLiteGraph:
         self.path = path
         self.conn = self.connect()
 
-    @staticmethod
-    def _dict_factory(cursor, row):
-        return {col[0]: row[idx] for idx, col in enumerate(cursor.description)}
-
     def connect(self):
         conn = sqlite3.connect(self.path)
-        conn.row_factory = self._dict_factory
+        conn.row_factory = _dict_factory
         # conn.row_factory = sqlite3.Row
         conn.enable_load_extension(True)
         conn.load_extension("mod_spatialite.so")
         return conn
+
+    def execute(self, sql, values=(), commit=False):
+        result = self.conn.execute(sql, values)
+        if commit:
+            self.commit()
+        return result
+
+    def executemany(self, sql, values):
+        return self.conn.executemany(sql, values)
+
+    def commit(self):
+        return self.conn.commit()
+
+    def reindex(self):
+        # TODO: create 'quoted column' helper method.
+        edges_index = _sql_column_list(self.get_columns("edges"))
+        nodes_index = _sql_column_list(self.get_columns("nodes"))
+        self.execute("DROP INDEX IF EXISTS edges_covering")
+        self.execute(f"CREATE INDEX edges_covering ON edges ({edges_index})")
+        self.execute("DROP INDEX IF EXISTS nodes_covering")
+        self.execute(f"CREATE INDEX nodes_covering ON nodes ({nodes_index})")
+        self.commit()
 
     def to_in_memory(self):
         # Load into new memory-based DB
@@ -62,47 +80,6 @@ class SQLiteGraph:
 
         return new_db
 
-    def execute(self, sql, values=(), commit=False):
-        result = self.conn.execute(sql, values)
-        if commit:
-            self.commit()
-        return result
-
-    def executemany(self, sql, values):
-        return self.conn.executemany(sql, values)
-
-    def commit(self):
-        return self.conn.commit()
-
-    def reindex(self):
-        # TODO: create 'quoted column' helper method.
-        edges_index = self._sql_column_list(self.get_columns("edges"))
-        nodes_index = self._sql_column_list(self.get_columns("nodes"))
-        self.execute("DROP INDEX IF EXISTS edges_covering")
-        self.execute(f"CREATE INDEX edges_covering ON edges ({edges_index})")
-        self.execute("DROP INDEX IF EXISTS nodes_covering")
-        self.execute(f"CREATE INDEX nodes_covering ON nodes ({nodes_index})")
-        self.commit()
-
-    @staticmethod
-    def _sql_column_list(columns):
-        return ", ".join([f"'{c}'" for c in columns])
-
-    @staticmethod
-    def _sql_set_column_list(columns):
-        return ", ".join(
-            [
-                f"'{c}'={GEOM_PLACEHOLDER if c == '_geometry' else PLACEHOLDER}"
-                for c in columns
-            ]
-        )
-
-    @staticmethod
-    def _sql_column_placeholders(columns):
-        return ", ".join(
-            GEOM_PLACEHOLDER if c == "_geometry" else PLACEHOLDER for c in columns
-        )
-
     def _create_graph(self):
         # Create the tables
         query = self.execute("PRAGMA table_info('spatial_ref_sys')")
@@ -136,8 +113,8 @@ class SQLiteGraph:
     def _create_node_table(self):
         sql = [
             "DROP TABLE IF EXISTS nodes",
-            "CREATE TABLE nodes (_key, UNIQUE(_key))",
-            "CREATE INDEX nodes_key ON nodes (_key)",
+            "CREATE TABLE nodes (_n, UNIQUE(_n))",
+            "CREATE INDEX nodes_n ON nodes (_n)",
         ]
         for s in sql:
             self.execute(s)
@@ -155,16 +132,17 @@ class SQLiteGraph:
         cols, vals = zip(*d.items())
         cols = ["_u", "_v", *cols]
 
-        placeholders = self._sql_column_placeholders(cols)
-        columns_string = self._sql_column_list(cols)
+        placeholders = _sql_column_placeholders(cols)
+        columns_string = _sql_column_list(cols)
         vals = [u, v, *vals]
         sql = f"REPLACE INTO edges ({columns_string}) VALUES ({placeholders})"
         self.execute(sql, vals, commit=commit)
 
+    # FIXME: allow arbitrary creation of new node from string ID with data
     def insert_or_ignore_node(self, node_string, commit=False):
         lon, lat = node_string.split(", ")
         node_geom = f"POINT({lon} {lat})"
-        sql = f"INSERT OR IGNORE INTO nodes (_key, _geometry) VALUES (?, GeomFromText(?, 4326))"
+        sql = f"INSERT OR IGNORE INTO nodes (_n, _geometry) VALUES (?, GeomFromText(?, 4326))"
         self.execute(sql, (node_string, node_geom))
 
         if commit:
@@ -214,20 +192,23 @@ class SQLiteGraph:
                 ebunch = []
 
     def add_nodes(self, nbunch, **attr):
-        if attr:
-            keys, values = attr.items()
-        else:
-            keys = []
-            values = []
+        for n in nbunch:
+            if type(n) == str:
+                # It's just a single node ID
+                ndict = {**attr}
+            else:
+                # It's a (n, ndict) tuple
+                n, ndict = n
+                if attr:
+                    ndict = {**attr, **ndict}
 
-        keys = ["_key", *keys]
-        values = [node_string, *values]
+            keys, values = ndict.items()
+            columns = self._insert_cols_string(("_n", *keys))
+            placeholders = _sql_column_placeholders((n, *keys))
+            sql = f"REPLACE INTO nodes ({columns_string}) VALUES ({placeholders})"
+            self.execute(sql)
 
-        columns_string = self._insert_cols_string(keys)
-
-        placeholders = self._sql_column_placeholders(keys)
-        sql = f"REPLACE INTO nodes ({columns_string}) VALUES ({placeholders})"
-        self.execute(sql, values)
+        self.commit()
 
     def add_nodes_batched(self, nbunch_to_add, batch_size=10000, **attr):
         nbunch_iter = iter(nbunch_to_add)
@@ -244,8 +225,8 @@ class SQLiteGraph:
                 self.add_nodes(nbunch, **attr)
                 nbunch = []
 
-    def add_node(self, key, ddict=None):
-        self.add_nodes((key), ddict)
+    def add_node(self, n, ddict=None):
+        self.add_nodes((n,), **ddict)
 
     def get_columns(self, table_name):
         return [c["name"] for c in self.execute(f"PRAGMA table_info({table_name})")]
@@ -269,14 +250,14 @@ class SQLiteGraph:
 
         return {key: value for key, value in row.items() if value is not None}
 
-    def get_node(self, key):
-        sql = "SELECT *, AsGeoJSON(_geometry) _geometry FROM nodes WHERE _key = ?"
-        row = self.execute(sql, (key,)).fetchone()
+    def get_node(self, n):
+        sql = "SELECT *, AsGeoJSON(_geometry) _geometry FROM nodes WHERE _n = ?"
+        row = self.execute(sql, (n,)).fetchone()
         if row is None:
             raise NodeNotFound("Specified node does not exist.")
         if row["_geometry"] is not None:
             row["_geometry"] = json.loads(row["_geometry"])
-        row.pop("_key")
+        row.pop("_n")
         return row
 
     def has_edge(self, u, v):
@@ -290,14 +271,14 @@ class SQLiteGraph:
             "SELECT _u FROM edges WHERE _u = ? AND _v = ? LIMIT 1", (u, v)
         )
 
-    def has_node(self, node):
+    def has_node(self, n):
         """Test whether a node exists in the table.
 
         :param node: Node ID.
         :type node: str
 
         """
-        return self._sql_any("SELECT _key FROM nodes WHERE _u = ? LIMIT 1", (node,))
+        return self._sql_any("SELECT _n FROM nodes WHERE _u = ? LIMIT 1", (n,))
 
     def has_predecessors(self, node):
         """Test whether there are any predecessors for the given node.
@@ -344,6 +325,16 @@ class SQLiteGraph:
 
             yield (u, v, d)
 
+    def delete_edges(self, edge_ids):
+        """Delete nodes from nodes table.
+
+        :param edge_ids: Iterable of (u, v) edge IDs.
+        :type edge_ids: iterable of 2-tuples.
+
+        """
+        sql = f"DELETE FROM edges WHERE _u = ? AND _v = ?"
+        self.executemany(sql, edge_ids)
+
     def iter_nodes(self):
         """Create a fast, iterable nbunch (generator of (n, d) tuples). The output
         can be used directly as an input for new graphs, including in-memory networkx
@@ -356,7 +347,7 @@ class SQLiteGraph:
         sql = "SELECT *,  AsGeoJSON(_geometry) _geometry FROM nodes"
         for row in self.execute(sql):
             d = {k: v for k, v in row.items() if v is not None}
-            n = d.pop("_key")
+            n = d.pop("_n")
 
             yield (n, d)
 
@@ -365,8 +356,19 @@ class SQLiteGraph:
 
         :returns: Generator of node IDs.
         :rtype: iterable of str
+
         """
-        return (r[0] for r in self.execute("SELECT DISTINCT _key FROM nodes"))
+        return (r[0] for r in self.execute("SELECT DISTINCT _n FROM nodes"))
+
+    def delete_nodes(self, nbunch):
+        """Delete nodes from nodes table.
+
+        :param node_ids: An iterable of node IDs.
+        :type node_ids: Iterable of str.
+
+        """
+        sql = f"DELETE FROM nodes WHERE _n = ?"
+        self.executemany(sql, ((n,) for n in nbunch))
 
     def iter_predecessor_ids(self, node=None):
         """Create an iterable of all predecessor node IDs: all nodes that are the
@@ -487,6 +489,25 @@ class SQLiteGraph:
         """
         self._replace_directed_neighbors(node, successors)
 
+    def set_node_attr(self, n, key, value):
+        self._add_columns_if_new_keys(self, "nodes", {key: value})
+
+        sql = f"UPDATE nodes SET {key}=? WHERE _n = ?"
+
+        self.execute(sql, (value, n))
+        self.commit()
+
+    def update_node(self, n, ddict):
+        if not ddict:
+            return
+
+        self._add_columns_if_new_keys(self, "nodes", ddict)
+        cols, values = zip(*ddict.items())
+
+        sql = self._update_node_sql(cols)
+        self.execute(sql, (*values, n))
+        self.commit()
+
     def set_edge_attr(self, u, v, key, value):
         self._add_columns_if_new_keys(self, "edges", {key: value})
 
@@ -495,7 +516,7 @@ class SQLiteGraph:
         self.execute(sql, [value, u, v])
         self.commit()
 
-    def update_edge(self, u, v, ddict):
+    def update_edge(self, u, v, ddict, commit=True):
         if not ddict:
             return
 
@@ -504,7 +525,8 @@ class SQLiteGraph:
 
         sql = self._update_edge_sql(cols)
         self.execute(sql, list(values) + [u, v])
-        self.commit()
+        if commit:
+            self.commit()
 
     @staticmethod
     def _update_edge_sql(cols):
@@ -524,163 +546,9 @@ class SQLiteGraph:
 
         """
         for u, v, d in ebunch:
-            self._add_columns_if_new_keys("edges", d)
-            cols, values = zip(*d.items())
-            sql = self._update_edge_sql(cols)
-            self.execute(sql, [*values, u, v])
+            self.update_edge(u, v, d, commit=False)
 
         self.commit()
-
-    def update_node(self, key, ddict):
-        if not ddict:
-            return
-
-        cols, values = self._prepare_nodes((key, ddict))
-        sql = self._update_node_sql(cols)
-        self.execute(sql, [*values, u])
-        self.commit()
-
-    def _prepare_edges(self, ebunch, nodes=False, **attr):
-        # TODO: also return the columns to create, if any, rather than actually
-        # creating them in the table. If an error occurs and the edges can't be
-        # inserted/updated, the table schema should not be changed.
-        edges_columns = self.get_edges_columns()
-        edges_values = []
-        nodes_values = []
-        seen = set([])
-        for edge in ebunch:
-            if len(edge) == 2:
-                u, v = edge
-                d = attr
-            elif len(edge) == 3:
-                u = edge[0]
-                _v = edge[1]
-                d = {**attr, **edge[2]}
-            else:
-                raise ValueError(
-                    "Edge must be 2-tuple of (u, v) or 3-tuple of (u, v, d)"
-                )
-
-            # Check for edge already existing. Skip.
-            # TODO: Issue a warning?
-            edge_id = (u, v)
-            in_db = self._sql_any(
-                "SELECT _u FROM edges WHERE _u = ? AND _v = ?", edge_id
-            )
-            if in_db or edge_id in seen:
-                continue
-
-            # TODO: convert to WKT at this step rather than i/o?
-            values = [u, v]
-            # Skip first two columns - these are _u and _v and we already
-            # accounted for them
-            for c in edges_columns[2:]:
-                try:
-                    value = d.pop(c)
-                except KeyError:
-                    value = None
-                values.append(value)
-            if d:
-                # There are new columns!
-                self._add_columns_if_new_keys("edges", d)
-                for key, value in d.items():
-                    edges_columns.append(key)
-                    values.append(value)
-                    # Account for previous edge data that now has to have the same
-                    # number of arguments on the insert command
-                    for previous_values in edges_values:
-                        previous_values.append(None)
-
-            edges_values.append(values)
-
-            # TODO: might save some time by not doing redundant node creation
-            # code (check if the node already exists)
-            if nodes:
-                for node in (u, v):
-                    coords_string = " ".join(node.split(", "))
-                    node_geom = f"POINT({coords_string})"
-                    nodes_values.append((node, node_geom))
-
-            seen.add((u, v))
-
-        if nodes:
-            return edges_columns, edges_values, nodes_values
-        else:
-            return edges_columns, edges_values
-
-    def _prepare_edges_insert(self, ebunch, **attr):
-        edges_columns, edges_values, nodes_values = self._prepare_edges(
-            ebunch, nodes=True, **attr
-        )
-
-        placeholders = self._sql_column_placeholders(keys)
-        columns_string = self._insert_cols_string(edges_columns)
-        edges_sql = (
-            f"INSERT OR IGNORE INTO edges ({columns_string}) VALUES ({placeholders})"
-        )
-
-        return edges_sql, edges_values, nodes_values
-
-    def _prepare_nodes(self, nbunch, **attr):
-        # TODO: also return the columns to create, if any, rather than actually
-        # creating them in the table. If an error occurs and the edges can't be
-        # inserted/updated, the table schema should not be changed.
-        columns = self.get_nodes_columns()
-
-        values = []
-        seen = set([])
-        for node in nbunch:
-            if len(node) == 1:
-                _key = node[0]
-                d = attr
-            elif len(node) == 2:
-                _key = node[0]
-                d = {**attr, **edge[2]}
-            else:
-                # TODO: this doesn't seem useful. Skip + warn / raise other
-                # error?
-                raise ValueError(
-                    "Node must be 1-tuple of (key,) or 2-tuple of (key, d)"
-                )
-
-            # Check for edge already existing. Skip.
-            # TODO: Issue a warning?
-            if self.has_node(_key) or edge_id in seen:
-                continue
-
-            # TODO: convert to WKT at this step rather than i/o?
-            values = [_key]
-            # Skip first two columns - these are u and v and we already
-            # accounted for them
-            for c in columns[2:]:
-                try:
-                    value = d.pop(c)
-                except KeyError:
-                    value = None
-                values.append(value)
-            if d:
-                # There are new columns!
-                self._add_columns_from_items("nodes", d.items())
-                for key, value in d.items():
-                    columns.append(key)
-                    values.append(value)
-
-            nodes_values.append(values)
-
-            seen.add((u, v))
-
-        return nodes_columns, nodes_values
-
-    def _prepare_nodes_insert(self, nbunch, **attr):
-        nodes_columns, nodes_values = self._prepare_nodes(ebunch, **attr)
-
-        columns = self._sql_columns_list(nodes_columns)
-        placeholders = self._sql_column_placeholders(keys)
-        nodes_template = (
-            f"INSERT OR IGNORE INTO nodes ({columns}) VALUES ({placeholders})"
-        )
-
-        return nodes_sql, nodes_values
 
     def _add_columns_if_new_keys(self, table_name, ddict, commit=False):
         """Add columns to a table given a stream of key:value pairs. Keys will become
@@ -749,6 +617,27 @@ class SQLiteGraph:
             return sorted(query, key=lambda r: _distance_sort(r, point))
 
         return (r for r in query)
+
+
+def _dict_factory(cursor, row):
+    return {col[0]: row[idx] for idx, col in enumerate(cursor.description)}
+
+
+def _sql_column_list(columns):
+    return ", ".join([f"'{c}'" for c in columns])
+
+
+def _sql_set_column_list(columns):
+    return ", ".join(
+        f"'{c}'={GEOM_PLACEHOLDER if c == '_geometry' else PLACEHOLDER}"
+        for c in columns
+    )
+
+
+def _sql_column_placeholders(columns):
+    return ", ".join(
+        GEOM_PLACEHOLDER if c == "_geometry" else PLACEHOLDER for c in columns
+    )
 
 
 def _distance_sort(row, point):
