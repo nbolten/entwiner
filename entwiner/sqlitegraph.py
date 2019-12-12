@@ -90,7 +90,6 @@ class SQLiteGraph:
         self._create_node_table()
 
     def _create_edge_table(self):
-        # TODO: covering index = faster lookups. Recreate after loading data.
         sql = (
             "DROP TABLE IF EXISTS edges",
             "CREATE TABLE edges (_u integer, _v integer, _layer text, UNIQUE(_u, _v))",
