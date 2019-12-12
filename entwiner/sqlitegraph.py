@@ -503,7 +503,7 @@ class SQLiteGraph:
         self._replace_directed_neighbors(node, successors)
 
     def set_node_attr(self, n, key, value):
-        self._add_columns_if_new_keys(self, "nodes", {key: value})
+        self._add_columns_if_new_keys("nodes", {key: value})
 
         sql = f"UPDATE nodes SET {key}=? WHERE _n = ?"
 
