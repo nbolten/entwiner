@@ -133,31 +133,3 @@ class Node(MutableMapping):
             self.sqlitegraph.set_node_attr(self.n, key, None)
         else:
             raise KeyError(key)
-
-
-def node_factory_factory(sqlitegraph):
-    """Creates factories of DB-based Nodes.
-
-    :param sqlitegraph: Graph database object.
-    :type sqlitegraph: entwiner.GraphDB
-
-    """
-
-    def node_factory():
-        return Nodes(_sqlitegraph=sqlitegraph)
-
-    return node_factory
-
-
-def immutable_node_factory_factory(sqlitegraph):
-    """Creates factories of immutable DB-based Nodes.
-
-    :param sqlitegraph: Graph database object.
-    :type sqlitegraph: entwiner.GraphDB
-
-    """
-
-    def node_factory():
-        return ImmutableNodes(_sqlitegraph=sqlitegraph)
-
-    return node_factory

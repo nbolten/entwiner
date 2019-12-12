@@ -1,4 +1,5 @@
 """Dict-like interface(s) for graphs."""
+from functools import partial
 import sqlite3
 import tempfile
 
@@ -8,7 +9,7 @@ from ..utils import sqlite_type
 from ..sqlitegraph import SQLiteGraph
 from ..exceptions import ImmutableGraphError
 from .edges import Edge, ImmutableEdge
-from .nodes import node_factory_factory, immutable_node_factory_factory
+from .nodes import Nodes, ImmutableNodes
 
 """
 NetworkX classes have been written to allow other dict-like storage methods aside from
@@ -30,8 +31,6 @@ value column rather than spreading keys into columns and requiring flat data.
 # adjacency dict-like from successor.
 
 # TODO: attach factories to container classes as classmethods
-# TODO: consider whether ImmutableEdge is a necessary class. Just use 'dict'? Should
-# ImmutableEdge be a collections.abc container?
 
 
 class ImmutableSuccessors:
@@ -254,48 +253,6 @@ class InnerAdjlist(ImmutableInnerAdjlist):
     # TODO: implement mutable __iter__
 
 
-def immutable_predecessors_factory_factory(sqlitegraph):
-    def predecessors_factory():
-        return ImmutablePredecessors(_sqlitegraph=sqlitegraph)
-
-    return predecessors_factory
-
-
-def predecessors_factory_factory(sqlitegraph):
-    def predecessors_factory():
-        return Predecessors(_sqlitegraph=sqlitegraph)
-
-    return predecessors_factory
-
-
-def immutable_successors_factory_factory(sqlitegraph):
-    def successors_factory():
-        return ImmutableSuccessors(_sqlitegraph=sqlitegraph)
-
-    return successors_factory
-
-
-def successors_factory_factory(sqlitegraph):
-    def successors_factory():
-        return Successors(_sqlitegraph=sqlitegraph)
-
-    return successors_factory
-
-
-def immutable_adjlist_inner_factory_factory(sqlitegraph):
-    def adjlist_inner_factory():
-        return ImmutableInnerAdjlist(sqlitegraph)
-
-    return adjlist_inner_factory
-
-
-def adjlist_inner_factory_factory(sqlitegraph):
-    def adjlist_inner_factory():
-        return InnerAdjlist(sqlitegraph)
-
-    return adjlist_inner_factory
-
-
 class DiGraphDB(nx.DiGraph):
     def __init__(
         self,
@@ -320,33 +277,38 @@ class DiGraphDB(nx.DiGraph):
 
         # The factories of nx dict-likes need to be informed of the connection
         if immutable:
-            self.node_dict_factory = immutable_node_factory_factory(self.sqlitegraph)
-            self.adjlist_outer_dict_factory = immutable_successors_factory_factory(
-                self.sqlitegraph
+            self.node_dict_factory = partial(
+                ImmutableNodes, _sqlitegraph=self.sqlitegraph
             )
-            self.adjlist_inner_dict_factory = immutable_adjlist_inner_factory_factory(
-                self.sqlitegraph
+            self.adjlist_outer_dict_factory = partial(
+                ImmutableSuccessors, _sqlitegraph=self.sqlitegraph
+            )
+            self.adjlist_inner_dict_factory = partial(
+                ImmutableInnerAdjlist, _sqlitegraph=self.sqlitegraph
             )
         else:
-            self.node_dict_factory = node_factory_factory(self.sqlitegraph)
-            self.adjlist_outer_dict_factory = successors_factory_factory(
-                self.sqlitegraph
+            self.node_dict_factory = partial(Nodes, _sqlitegraph=self.sqlitegraph)
+            self.adjlist_outer_dict_factory = partial(
+                Successors, _sqlitegraph=self.sqlitegraph
             )
-            self.adjlist_inner_dict_factory = adjlist_inner_factory_factory(
-                self.sqlitegraph
+            self.adjlist_inner_dict_factory = partial(
+                InnerAdjlist, _sqlitegraph=self.sqlitegraph
             )
 
         # FIXME: Shouldn't this be 'Edge' or 'ImmutableEdge'?
-        self.edge_attr_dict_factory = dict
+        if immutable:
+            self.edge_attr_dict_factory = ImmutableEdge
+        else:
+            self.edge_attr_dict_factory = Edge
 
         # FIXME: should use a persistent table/container for .graph as well.
         self.graph = {}
         self._node = self.node_dict_factory()
         self._adj = self.adjlist_outer_dict_factory()
         if immutable:
-            self._pred = immutable_predecessors_factory_factory(self.sqlitegraph)()
+            self._pred = partial(ImmutablePredecessors, _sqlitegraph=self.sqlitegraph)
         else:
-            self._pred = predecessors_factory_factory(self.sqlitegraph)()
+            self._pred = partial(Predecessors, _sqlitegraph=self.sqlitegraph)
         self._succ = self._adj
 
         if incoming_graph_data is not None:
