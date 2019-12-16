@@ -27,10 +27,17 @@ class EdgeDict(MutableMapping):
         if self.u is not None and self.v is not None:
             self.sqlitegraph.set_edge_attr(self.u, self.v, key, value)
         else:
-            raise UninitializedEdgeError("Attempt to set attrs on uninitialized edge.")
+            raise UninitializedEdgeError(
+                "Attempted to set attrs on uninitialized edge."
+            )
 
     def __delitem__(self, key):
-        self.sqlitegraph.set_edge_attr(self.u, self.v, key, None)
+        if self.u is not None and self.v is not None:
+            self.sqlitegraph.set_edge_attr(self.u, self.v, key, None)
+        else:
+            raise UninitializedEdgeError(
+                "Attempted to delete attrs on uninitialized edge."
+            )
 
 
 class EdgeView(Mapping):
@@ -48,14 +55,11 @@ class EdgeView(Mapping):
 
     """
 
-    ddict_factory = dict
-
     def __init__(self, _sqlitegraph=None, _u=None, _v=None, **kwargs):
         self.sqlitegraph = _sqlitegraph
         self.u = _u
         self.v = _v
-        self.ddict_factory = self.ddict_factory
-        self.ddict = self.ddict_factory()
+        self.ddict = dict()
         self.ddict.update(kwargs)
 
     def __getitem__(self, key):
@@ -97,19 +101,18 @@ class Edge(EdgeView, MutableMapping):
 
     """
 
-    ddict_factory = EdgeDict
-
-    def __init__(self, *args, _sqlitegraph=None, **kwargs):
-        self.ddict = partial(self.ddict_factory, _sqlitegraph)
-        super().__init__(*args, _sqlitegraph=_sqlitegraph, **kwargs)
+    def __init__(self, *args, _sqlitegraph=None, _u=None, _v=None, **kwargs):
+        self.sqlitegraph = _sqlitegraph
+        self.u = _u
+        self.v = _v
+        self.ddict = EdgeDict(_sqlitegraph=_sqlitegraph, _u=_u, _v=_v)
+        self.ddict.update(kwargs)
 
     def __setitem__(self, key, value):
-        if self.u is not None and self.v is not None:
-            self.sqlitegraph.set_edge_attr(self.u, self.v, key, value)
-        raise UninitializedEdgeError("Attempt to set attrs on uninitialized edge.")
+        self.ddict[key] = value
 
     def __delitem__(self, key):
-        self.sqlitegraph.set_edge_attr(self.u, self.v, key, None)
+        del self.ddict[key]
 
     def sync_to_db(self):
         self.sqlitegraph.insert_or_replace_edge(self.u, self.v, self.ddict)

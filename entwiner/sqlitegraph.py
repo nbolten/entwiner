@@ -552,9 +552,10 @@ class SQLiteGraph:
         self.commit()
 
     def set_edge_attr(self, u, v, key, value):
-        self._add_columns_if_new_keys(self, "edges", {key: value})
+        self._add_columns_if_new_keys("edges", {key: value})
 
-        sql = f"UPDATE edges SET {key}=? WHERE _u = ? AND _v = ?"
+        set_template = _sql_set_column_list((key,))
+        sql = f"UPDATE edges SET {set_template} WHERE _u = ? AND _v = ?"
 
         self.execute(sql, (value, u, v))
         self.commit()
@@ -563,7 +564,7 @@ class SQLiteGraph:
         if not ddict:
             return
 
-        self._add_columns_if_new_keys(self, "edges", ddict)
+        self._add_columns_if_new_keys("edges", ddict)
         cols, values = zip(*ddict.items())
 
         sql = self._update_edge_sql(cols)
@@ -573,7 +574,7 @@ class SQLiteGraph:
 
     @staticmethod
     def _update_edge_sql(cols):
-        column_template = _sql_set_column_list(columns)
+        column_template = _sql_set_column_list(cols)
         sql = f"UPDATE edges SET {column_template} WHERE _u = ? AND _v = ?"
         return sql
 
