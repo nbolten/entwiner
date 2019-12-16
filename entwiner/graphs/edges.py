@@ -2,7 +2,7 @@
 from collections.abc import Mapping, MutableMapping
 from functools import partial
 
-from entwiner.exceptions import ImmutableGraphError
+from entwiner.exceptions import ImmutableGraphError, UninitializedEdgeError
 
 
 class EdgeDict(MutableMapping):
@@ -26,7 +26,8 @@ class EdgeDict(MutableMapping):
     def __setitem__(self, key, value):
         if self.u is not None and self.v is not None:
             self.sqlitegraph.set_edge_attr(self.u, self.v, key, value)
-        raise UninitializedEdgeError("Attempt to set attrs on uninitialized edge.")
+        else:
+            raise UninitializedEdgeError("Attempt to set attrs on uninitialized edge.")
 
     def __delitem__(self, key):
         self.sqlitegraph.set_edge_attr(self.u, self.v, key, None)

@@ -71,7 +71,7 @@ class DiGraphDBView(nx.DiGraph):
 
         """
         return (
-            (u, v, self.edge_attr_dict_factory(**d))
+            (u, v, self.edge_attr_dict_factory(_u=u, _v=v, **d))
             for u, v, d in self.sqlitegraph.iter_edges()
         )
 
