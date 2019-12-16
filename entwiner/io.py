@@ -7,7 +7,7 @@ import fiona
 from .exceptions import UnknownGeometry, UnrecognizedFileFormat
 
 
-def edge_generator(path, precision, rev=False, changes_sign=None):
+def edge_generator(path, precision, changes_sign=None, add_reverse=False):
     layer = os.path.splitext(os.path.basename(path))[0]
     if changes_sign is None:
         changes_sign = []
@@ -36,7 +36,7 @@ def edge_generator(path, precision, rev=False, changes_sign=None):
                     continue
                 u, v, props = edge_from_feature(f)
                 yield u, v, props
-                if rev:
+                if add_reverse:
                     props = {**props}
                     props["_geometry"] = reverse_linestring(
                         f["geometry"]["coordinates"]

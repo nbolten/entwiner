@@ -1,11 +1,11 @@
 """Dict-like interface(s) for graphs."""
 from functools import partial
-import tempfile
+import os
 
 import networkx as nx
 
 from ..sqlitegraph import SQLiteGraph
-from ..exceptions import ImmutableGraphError
+from ..exceptions import ImmutableGraphError, UnderspecifiedGraphError
 from .edges import Edge, EdgeView
 from .nodes import Nodes, NodesView
 from .outer_adjlists import OuterPredecessors, OuterSuccessors
@@ -85,6 +85,14 @@ class DiGraphDBView(nx.DiGraph):
 
 class DiGraphDB(DiGraphDBView):
     """Read-only (immutable) version of DiGraphDB.
+    :param args: Positional arguments compatible with networkx.DiGraph.
+    :type args: array-like
+    :param path: An optional path to database file (or :memory:-type string).
+    :type path: str
+    :param sqlitegraph: An optional path to a custom SQLiteGraph instance.
+    :type sqlitegraph: SQLiteGraph
+    :param kwargs: Keyword arguments compatible with networkx.DiGraph.
+    :type kwargs: dict-like
     """
 
     node_dict_factory = Nodes
@@ -94,11 +102,18 @@ class DiGraphDB(DiGraphDBView):
     edge_attr_dict_factory = Edge
 
     def __init__(self, *args, path=None, sqlitegraph=None, **kwargs):
+        # TODO: Consider adding database file existence checker rather than always
+        # checking on initialization?
         if sqlitegraph is None:
             if path is None:
-                _, path = tempfile.mkstemp()
-            sqlitegraph = SQLiteGraph(path)
-            sqlitegraph.create_graph()
+                raise UnderSpecifiedGraphError()
+            else:
+                if not os.path.exists(path):
+                    raise UnderSpecifiedGraphError(
+                        "DB file does not exist. Consider using DiGraphDB.create_graph"
+                    )
+
+                sqlitegraph = SQLiteGraph(path)
 
         super().__init__(*args, path=path, sqlitegraph=sqlitegraph, **kwargs)
         self.mutable = False
