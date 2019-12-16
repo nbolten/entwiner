@@ -71,8 +71,17 @@ class SQLiteGraph:
         new_db.conn.execute(
             "SELECT RecoverGeometryColumn('edges', '_geometry', 4326, 'LINESTRING')"
         )
-        # TODO: Not necessary?
-        new_db.conn.execute("SELECT DisableSpatialIndex('edges', '_geometry')")
+
+        idx_exists_query = new_db.conn.execute(
+            "SELECT 'name' FROM sqlite_master WHERE type='table' AND name='idx_edges_geometry'"
+        )
+        try:
+            next(idx_exists_query)
+            new_db.conn.execute("SELECT DisableSpatialIndex('edges', '_geometry')")
+        except StopIteration:
+            # No such table
+            pass
+
         new_db.conn.execute("DROP TABLE IF EXISTS idx_edges__geometry")
         new_db.conn.execute("SELECT CreateSpatialIndex('edges', '_geometry')")
 
@@ -338,7 +347,7 @@ class SQLiteGraph:
             yield (u, v, d)
 
     def delete_edges(self, edge_ids):
-        """Delete nodes from nodes table.
+        """Delete edges frome dges table.
 
         :param edge_ids: Iterable of (u, v) edge IDs.
         :type edge_ids: iterable of 2-tuples.
@@ -346,6 +355,28 @@ class SQLiteGraph:
         """
         sql = f"DELETE FROM edges WHERE _u = ? AND _v = ?"
         self.executemany(sql, edge_ids)
+
+    def delete_predecessors(self, n):
+        """Delete edges with predecessors to node n. In other words, n = v in (u, v)
+        edge definition.
+
+        :param n: Node ID.
+        :type edge_ids: str
+
+        """
+        sql = f"DELETE FROM edges WHERE _v = ?"
+        self.execute(sql, (n,))
+
+    def delete_successors(self, n):
+        """Delete edges with successors to node n. In other words, n = u in (u, v)
+        edge definition.
+
+        :param n: Node ID.
+        :type edge_ids: str
+
+        """
+        sql = f"DELETE FROM edges WHERE _u = ?"
+        self.execute(sql, (n,))
 
     def iter_nodes(self):
         """Create a fast, iterable nbunch (generator of (n, d) tuples). The output
@@ -561,6 +592,33 @@ class SQLiteGraph:
             self.update_edge(u, v, d, commit=False)
 
         self.commit()
+
+    def len_edges(self):
+        """Count number of edges in the graph."""
+        query = self.sqlitegraph.conn.execute("SELECT COUNT() c FROM edges")
+        return query.fetchone()["c"]
+
+    def successors_len(self):
+        """Count of unique successor nodes in the graph."""
+        query = self.sqlitegraph.conn.execute("SELECT COUNT(DISTINCT(_v)) c FROM edges")
+        return query.fetchone()["c"]
+
+    def predecessors_len(self):
+        """Count of unique predecessor nodes in the graph."""
+        query = self.sqlitegraph.conn.execute("SELECT COUNT(DISTINCT(_u)) c FROM edges")
+        return query.fetchone()["c"]
+
+    def len_successors_of(self, n):
+        """Count number of edges that are successors of a given node."""
+        sql = "SELECT COUNT() c FROM edges WHERE _u = ?"
+        query = self.sqlitegraph.conn.execute(sql, (n,))
+        return query.fetchone()["c"]
+
+    def len_predecessors_of(self, n):
+        """Count number of edges that are predecessors of a given node."""
+        sql = "SELECT COUNT() c FROM edges WHERE _v = ?"
+        query = self.sqlitegraph.conn.execute(sql, (n,))
+        return query.fetchone()["c"]
 
     def _add_columns_if_new_keys(self, table_name, ddict, commit=False):
         """Add columns to a table given a stream of key:value pairs. Keys will become

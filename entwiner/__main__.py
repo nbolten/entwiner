@@ -4,7 +4,7 @@ import os
 import click
 import fiona
 
-from . import build, io, DiGraphDB
+from . import io, DiGraphDB
 
 BATCH_SIZE = 1000
 
@@ -18,7 +18,7 @@ def entwiner(infiles, outfile, precision, changes_sign):
     click.echo("Creating new graph database... ", nl=False)
     if os.path.exists(outfile):
         os.rename(outfile, outfile + ".bak")
-    G = DiGraphDB(path=outfile, create=True)
+    G = DiGraphDB.create_graph(outfile)
     click.echo("Done")
 
     n = 0

@@ -6,8 +6,8 @@ import networkx as nx
 from ..exceptions import NodeNotFound
 
 
-class ImmutableNodes(Mapping):
-    """A mutable mapping from node IDs to nodes. Used by NetworkX classes to iterate
+class NodesView(Mapping):
+    """An immutable mapping from node IDs to nodes. Used by NetworkX classes to iterate
     over nodes.
 
     :param _sqlitegraph: The SQLite-backed graph class.
@@ -20,7 +20,7 @@ class ImmutableNodes(Mapping):
 
     def __getitem__(self, key):
         try:
-            return ImmutableNode(key, _sqlitegraph=self.sqlitegraph)
+            return NodeView(key, _sqlitegraph=self.sqlitegraph)
         except NodeNotFound:
             raise nx.NodeNotFound
 
@@ -72,7 +72,7 @@ class Nodes(MutableMapping):
             raise KeyError(key)
 
 
-class ImmutableNode(Mapping):
+class NodeView(Mapping):
     """Retrieves node attributes from table, but does not allow assignment.
 
     :param _sqlitegraph: The SQLite-backed graph class.

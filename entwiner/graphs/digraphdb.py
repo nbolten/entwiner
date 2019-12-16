@@ -1,319 +1,113 @@
 """Dict-like interface(s) for graphs."""
 from functools import partial
-import sqlite3
 import tempfile
 
 import networkx as nx
 
-from ..utils import sqlite_type
 from ..sqlitegraph import SQLiteGraph
 from ..exceptions import ImmutableGraphError
-from .edges import Edge, ImmutableEdge
-from .nodes import Nodes, ImmutableNodes
-
-"""
-NetworkX classes have been written to allow other dict-like storage methods aside from
-the default, which is a plain Python dict. All one needs to do (in theory) is create
-a few functions that can be used to generate those dict-like objects - a few factories.
-
-Because our implementation requires storing/retrieving graph information from an SQLite
-database, the factories need to have access to a shared database connection.
-
-In other words, we need to embed potentially dynamic information into a factory: we
-need factories of factories that take the database connection as an input.
-
-TODO: allow different storage strategies - e.g. pickle or JSON encoding into single
-value column rather than spreading keys into columns and requiring flat data.
-
-"""
-
-# FIXME: G._pred is not functioning correctly - need a way to distinguish predecessor
-# adjacency dict-like from successor.
-
-# TODO: attach factories to container classes as classmethods
+from .edges import Edge, EdgeView
+from .nodes import Nodes, NodesView
+from .outer_adjlists import OuterPredecessors, OuterSuccessors
+from .outer_adjlists import OuterPredecessorsView, OuterSuccessorsView
+from .inner_adjlists import InnerPredecessors, InnerSuccessors
+from .inner_adjlists import InnerPredecessorsView, InnerSuccessorsView
 
 
-class ImmutableSuccessors:
-    def __init__(self, _sqlitegraph=None):
-        self.sqlitegraph = _sqlitegraph
+class DiGraphDBView(nx.DiGraph):
+    node_dict_factory = NodesView
+    adjlist_outer_dict_factory = OuterSuccessorsView
+    # In networkx, inner adjlist is only ever invoked without parameters in
+    # order to assign new nodes or edges with no attr. Therefore, its functionality
+    # can be accounted for elsewhere: via __getitem__ and __setitem__ on the
+    # outer adjacency list.
+    adjlist_inner_dict_factory = dict
+    edge_attr_dict_factory = EdgeView
 
-    def items(self):
-        # TODO: see note in Successors .items()
-        successor_id_generator = self.sqlitegraph.iter_successor_ids()
-        return (
-            (s_id, ImmutableInnerAdjlist(self.sqlitegraph, s_id, False))
-            for s_id in successor_id_generator
-        )
-
-    def __getitem__(self, key):
-        return ImmutableInnerAdjlist(self.sqlitegraph, key, False)
-
-    def __contains__(self, key):
-        return self.sqlitegraph.has_successors(key)
-
-    def __iter__(self):
-        return self.sqlitegraph.iter_predecessor_ids()
-
-
-class Successors(ImmutableSuccessors):
-    def clear(self):
-        # What should this do? Is it safe to drop all rows given that predecessors
-        # might still be defined?
-        pass
-
-    def items(self):
-        # TODO: investigate whether this method is ever actually used. The atlas views
-        # put this container in its ._atlas property and implements its own .items()
-        # that actually calls Successors.__getitem__()
-        # FIXME: The above is actually very important for routing, as
-        # Successors.items() is part of the Dijkstra's method implementation and
-        # __getitem__ is relatively slow.
-        successor_id_generator = self.sqlitegraph.iter_successor_ids()
-        return (
-            (s_id, InnerAdjlist(self.sqlitegraph, s_id, False))
-            for s_id in successor_id_generator
-        )
-
-    def __getitem__(self, key):
-        return InnerAdjlist(self.sqlitegraph, key, False)
-
-    def __setitem__(self, key, ddict):
-        self.sqlitegraph.replace_successors(key, ((k, v) for k, v in ddict.items))
-
-
-class ImmutablePredecessors:
-    def __init__(self, _sqlitegraph=None):
-        self.sqlitegraph = _sqlitegraph
-
-    def items(self):
-        self.sqlitegraph.iter_predecessors()
-
-    def __getitem__(self, key):
-        return ImmutableInnerAdjlist(self.sqlitegraph, key, True)
-
-    def __contains__(self, key):
-        return self.sqlitegraph.has_predecessors(key)
-
-    def __iter__(self):
-        self.sqlitegraph.iter_predecessor_ids()
-
-
-class Predecessors(ImmutablePredecessors):
-    def clear(self):
-        pass
-
-    def items(self):
-        query = self.sqlitegraph.conn.execute("SELECT _v v FROM edges")
-        return (
-            (row["v"], InnerAdjlist(self.sqlitegraph, row["v"], True)) for row in query
-        )
-
-    def __getitem__(self, key):
-        # Return an atlas view - an inner adjlist
-        return InnerAdjlist(self.sqlitegraph, key, True)
-
-    def __setitem__(self, key, ddict):
-        self.sqlitegraph.replace_predecessors(key, ((k, v) for k, v in ddict.items()))
-
-
-"""Inner adjacency list class + factory."""
-# TODO: use Mapping abc for better dict compatibility
-class ImmutableInnerAdjlist:
-    """Inner adjacency "list": dict-like keyed by neighbors, values are edge
-    attributes.
-
-    :param conn: database connection.
-    :type conn: sqlite3.Connection
-    :param key: Key used to access this adjacency "list" - used for lookups.
-    :type key: str
-    :param pred: Whether this adjacency list is a "predecessor" list, as opposed to the
-                 default of containing successors.
-    :type pred: bool
-    """
-
-    def __init__(self, _sqlitegraph=None, _key=None, _pred=False):
-        self.sqlitegraph = _sqlitegraph
-        self.key = _key
-        # TODO: point for optimization: remove conditionals on self.pred at
-        # initialization
-        self.pred = _pred
-
-    def get(self, key, defaults):
-        try:
-            return self[key]
-        except KeyError:
-            return defaults
-
-    def items(self):
-        # TODO: avoid predecessor checks by using yet another class like
-        # "PredecessorNeighbor"
-        if self.pred:
-            return self.sqlitegraph.iter_predecessors(self.key)
-        else:
-            return self.sqlitegraph.iter_successors(self.key)
-
-    def values(self):
-        # TODO: check if this is actually immutable - can the Edges be mutated?
-        if self.pred:
-            edge_ids = self.sqlitegraph.iter_predecessor_ids(self.key)
-            return (Edge(self.sqlitegraph, e, self.key) for e in edge_ids)
-        else:
-            edge_ids = self.sqlitegraph.iter_successor_ids(self.key)
-            return (Edge(self.sqlitegraph, self.key, e) for e in edge_ids)
-
-    def __getitem__(self, key):
-        if self.pred:
-            return self.sqlitegraph.get_edge_attr(key, self.key)
-        else:
-            return self.sqlitegraph.get_edge_attr(self.key, key)
-
-    def __contains__(self, key):
-        if self.pred:
-            return self.sqlitegraph.has_edge(key, self.key)
-        else:
-            return self.sqlitegraph.has_edge(self.key, key)
-
-    def __iter__(self):
-        if self.pred:
-            return self.sqlitegraph.iter_predecessor_ids(self.key)
-        else:
-            return self.sqlitegraph.iter_successor_ids(self.key)
-
-    def __len__(self):
-        if self.pred:
-            query = self.sqlitegraph.conn.execute(
-                "SELECT count(*) count FROM edges WHERE _v = ?", (self.key,)
-            )
-        else:
-            query = self.sqlitegraph.conn.execute(
-                "SELECT count(*) count FROM edges WHERE _u = ?", (self.key,)
-            )
-        return query.fetchone()["count"]
-
-
-class InnerAdjlist(ImmutableInnerAdjlist):
-    """Inner adjacency "list": dict-like keyed by neighbors, values are edge
-    attributes.
-
-    :param conn: database connection.
-    :type conn: sqlite3.Connection
-    :param key: Key used to access this adjacency "list" - used for lookups.
-    :type key: str
-    :param pred: Whether this adjacency list is a "predecessor" list, as opposed to the
-                 default of containing successors.
-    :type pred: bool
-    """
-
-    def __init__(self, _sqlitegraph=None, _key=None, _pred=False):
-        self.sqlitegraph = _sqlitegraph
-        self.key = _key
-        # TODO: point for optimization: remove conditionals on self.pred at
-        # initialization
-        self.pred = _pred
-
-    def items(self):
-        if self.pred:
-            edge_ids = self.sqlitegraph.iter_predecessor_ids(self.key)
-            return ((e, Edge(self.sqlitegraph, e, self.key)) for e in edge_ids)
-        else:
-            edge_ids = self.sqlitegraph.iter_successor_ids(self.key)
-            return ((e, Edge(self.sqlitegraph, self.key, e)) for e in edge_ids)
-
-    def __getitem__(self, key):
-        if self.pred:
-            has_edge = self.sqlitegraph.has_edge(key, self.key)
-        else:
-            has_edge = self.sqlitegraph.has_edge(self.key, key)
-
-        if has_edge:
-            return Edge(self.sqlitegraph, _u=self.key, _v=key)
-        else:
-            raise KeyError("No key {}".format(key))
-
-    def __setitem__(self, key, value):
-        if key in self:
-            if self.pred:
-                self.sqlitegraph.update_edge(key, self.key, value)
-            else:
-                self.sqlitegraph.update_edge(self.key, key, value)
-        else:
-            if self.pred:
-                self.sqlitegraph.add_edge(key, self.key, value)
-            else:
-                self.sqlitegraph.add_edge(self.key, key, value)
-
-    def values(self):
-        if self.pred:
-            edge_ids = self.sqlitegraph.iter_predecessor_ids(self.key)
-            return (Edge(self.sqlitegraph, e, self.key) for e in edge_ids)
-        else:
-            edge_ids = self.sqlitegraph.iter_successor_ids(self.key)
-            return (Edge(self.sqlitegraph, self.key, e) for e in edge_ids)
-
-    # TODO: implement mutable __iter__
-
-
-class DiGraphDB(nx.DiGraph):
-    def __init__(
-        self,
-        incoming_graph_data=None,
-        path=None,
-        sqlitegraph=None,
-        create=False,
-        immutable=False,
-        in_memory=False,
-        **attr
-    ):
-        if sqlitegraph is None:
-            if path is None:
-                n, path = tempfile.mkstemp()
+    def __init__(self, incoming_graph_data=None, path=None, sqlitegraph=None, **attr):
+        # Path attr overrides sqlite attr
+        if path:
             sqlitegraph = SQLiteGraph(path)
-        if in_memory:
-            sqlitegraph = sqlitegraph.to_in_memory()
+
         self.sqlitegraph = sqlitegraph
-        self.immutable = immutable
-        if create:
-            self._create()
 
         # The factories of nx dict-likes need to be informed of the connection
-        if immutable:
-            self.node_dict_factory = partial(
-                ImmutableNodes, _sqlitegraph=self.sqlitegraph
-            )
-            self.adjlist_outer_dict_factory = partial(
-                ImmutableSuccessors, _sqlitegraph=self.sqlitegraph
-            )
-            self.adjlist_inner_dict_factory = partial(
-                ImmutableInnerAdjlist, _sqlitegraph=self.sqlitegraph
-            )
-        else:
-            self.node_dict_factory = partial(Nodes, _sqlitegraph=self.sqlitegraph)
-            self.adjlist_outer_dict_factory = partial(
-                Successors, _sqlitegraph=self.sqlitegraph
-            )
-            self.adjlist_inner_dict_factory = partial(
-                InnerAdjlist, _sqlitegraph=self.sqlitegraph
-            )
-
-        # FIXME: Shouldn't this be 'Edge' or 'ImmutableEdge'?
-        if immutable:
-            self.edge_attr_dict_factory = ImmutableEdge
-        else:
-            self.edge_attr_dict_factory = Edge
+        self.node_dict_factory = partial(
+            self.node_dict_factory, _sqlitegraph=sqlitegraph
+        )
+        self.adjlist_outer_dict_factory = partial(
+            self.adjlist_outer_dict_factory, _sqlitegraph=sqlitegraph
+        )
+        self.adjlist_inner_dict_factory = self.adjlist_inner_dict_factory
+        self.edge_attr_dict_factory = self.edge_attr_dict_factory(
+            _sqlitegraph=sqlitegraph
+        )
 
         # FIXME: should use a persistent table/container for .graph as well.
         self.graph = {}
         self._node = self.node_dict_factory()
-        self._adj = self.adjlist_outer_dict_factory()
-        if immutable:
-            self._pred = partial(ImmutablePredecessors, _sqlitegraph=self.sqlitegraph)
-        else:
-            self._pred = partial(Predecessors, _sqlitegraph=self.sqlitegraph)
-        self._succ = self._adj
+        self._succ = self._adj = self.adjlist_outer_dict_factory()
+        self._pred = OuterPredecessorsView(_sqlitegraph=self.sqlitegraph)
 
         if incoming_graph_data is not None:
             nx.convert.to_networkx_graph(incoming_graph_data, create_using=self)
         self.graph.update(attr)
+
+        # Set custom flag for read-only graph DBs
+        self.mutable = False
+
+    def size(self, weight=None):
+        if weight is None:
+            return self.sqlitegraph.len_edges()
+        else:
+            return super().size(weight=weight)
+
+    def iter_edges(self):
+        """Roughly equivalent to the .edges interface, but much faster.
+
+        :returns: generator of (u, v, d) similar to .edges, but where d is a
+                  dictionary, not an Edge that syncs to database.
+        :rtype: tuple generator
+
+        """
+        return (
+            (u, v, self.edge_attr_factory(**d))
+            for u, v, d in self.sqlitegraph.iter_edges()
+        )
+
+    def edges_dwithin(self, lon, lat, distance, sort=False):
+        return self.sqlitegraph.edges_dwithin(lon, lat, distance, sort=sort)
+
+    def to_in_memory(self):
+        new_sqlitegraph = self.sqlitegraph.to_in_memory()
+        return self.__class__(sqlitegraph=new_sqlitegraph)
+
+
+class DiGraphDB(DiGraphDBView):
+    """Read-only (immutable) version of DiGraphDB.
+    """
+
+    node_dict_factory = Nodes
+    adjlist_outer_dict_factory = OuterSuccessors
+    # TODO: consider creating a read-only Mapping in the case of immutable graphs.
+    adjlist_inner_dict_factory = dict
+    edge_attr_dict_factory = Edge
+
+    def __init__(self, *args, path=None, sqlitegraph=None, **kwargs):
+        if sqlitegraph is None:
+            if path is None:
+                _, path = tempfile.mkstemp()
+            sqlitegraph = SQLiteGraph(path)
+            sqlitegraph.create_graph()
+
+        super().__init__(*args, path=path, sqlitegraph=sqlitegraph, **kwargs)
+        self.mutable = False
+
+    @classmethod
+    def create_graph(cls, path, *args, **kwargs):
+        sqlitegraph = SQLiteGraph(path)
+        sqlitegraph._create_graph()
+        return DiGraphDB(sqlitegraph=sqlitegraph, *args, **kwargs)
 
     def add_edges_from(self, ebunch_to_add, _batch_size=1000, counter=None, **attr):
         """Equivalent to add_edges_from in networkx but with batched SQL writes.
@@ -326,8 +120,6 @@ class DiGraphDB(nx.DiGraph):
         :type attr:
 
         """
-        self._check_immutable()
-
         if _batch_size < 2:
             # User has entered invalid number (negative, zero) or 1. Use default behavior.
             super().add_edges_from(self, ebunch_to_add, **attr)
@@ -335,39 +127,8 @@ class DiGraphDB(nx.DiGraph):
 
         self.sqlitegraph.add_edges_batched(ebunch_to_add, _batch_size, counter=counter)
 
-    def size(self, weight=None):
-        if weight is None:
-            query_results = self.sqlitegraph.execute("SELECT count() FROM edges")
-            count = next(query_results)["count()"]
-            return count
-        else:
-            return super().size(weight=weight)
-
-    def iter_edges(self):
-        """Roughly equivalent to the .edges interface, but much faster.
-
-        :returns: generator of (u, v, d) similar to .edges, but where d is a
-                  dictionary, not an Edge that syncs to database.
-        :rtype: tuple generator
-
-        """
-        # FIXME: this is currently a read-only strategy (data is converted to dict).
-        # We should offer a read-only and non-read-only version downstream.
-        return self.sqlitegraph.iter_edges()
-
     def update_edges(self, ebunch):
         return self.sqlitegraph.update_edges(ebunch)
 
     def reindex(self):
         self.sqlitegraph.reindex()
-
-    def _create(self):
-        self._check_immutable()
-        self.sqlitegraph._create_graph()
-
-    def _check_immutable(self):
-        if self.immutable:
-            raise ImmutableGraphError("Attempted to modify read-only/immutable graph.")
-
-    def edges_dwithin(self, lon, lat, distance, sort=False):
-        return self.sqlitegraph.edges_dwithin(lon, lat, distance, sort=sort)
