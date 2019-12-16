@@ -39,8 +39,8 @@ class DiGraphDBView(nx.DiGraph):
             self.adjlist_outer_dict_factory, _sqlitegraph=sqlitegraph
         )
         self.adjlist_inner_dict_factory = self.adjlist_inner_dict_factory
-        self.edge_attr_dict_factory = self.edge_attr_dict_factory(
-            _sqlitegraph=sqlitegraph
+        self.edge_attr_dict_factory = partial(
+            self.edge_attr_dict_factory, _sqlitegraph=sqlitegraph
         )
 
         # FIXME: should use a persistent table/container for .graph as well.
@@ -71,7 +71,7 @@ class DiGraphDBView(nx.DiGraph):
 
         """
         return (
-            (u, v, self.edge_attr_factory(**d))
+            (u, v, self.edge_attr_dict_factory(**d))
             for u, v, d in self.sqlitegraph.iter_edges()
         )
 
