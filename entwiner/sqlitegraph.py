@@ -595,29 +595,29 @@ class SQLiteGraph:
 
     def len_edges(self):
         """Count number of edges in the graph."""
-        query = self.sqlitegraph.conn.execute("SELECT COUNT() c FROM edges")
+        query = self.execute("SELECT COUNT() c FROM edges")
         return query.fetchone()["c"]
 
     def successors_len(self):
         """Count of unique successor nodes in the graph."""
-        query = self.sqlitegraph.conn.execute("SELECT COUNT(DISTINCT(_v)) c FROM edges")
+        query = self.execute("SELECT COUNT(DISTINCT(_v)) c FROM edges")
         return query.fetchone()["c"]
 
     def predecessors_len(self):
         """Count of unique predecessor nodes in the graph."""
-        query = self.sqlitegraph.conn.execute("SELECT COUNT(DISTINCT(_u)) c FROM edges")
+        query = self.execute("SELECT COUNT(DISTINCT(_u)) c FROM edges")
         return query.fetchone()["c"]
 
     def len_successors_of(self, n):
         """Count number of edges that are successors of a given node."""
         sql = "SELECT COUNT() c FROM edges WHERE _u = ?"
-        query = self.sqlitegraph.conn.execute(sql, (n,))
+        query = self.execute(sql, (n,))
         return query.fetchone()["c"]
 
     def len_predecessors_of(self, n):
         """Count number of edges that are predecessors of a given node."""
         sql = "SELECT COUNT() c FROM edges WHERE _v = ?"
-        query = self.sqlitegraph.conn.execute(sql, (n,))
+        query = self.execute(sql, (n,))
         return query.fetchone()["c"]
 
     def _add_columns_if_new_keys(self, table_name, ddict, commit=False):
