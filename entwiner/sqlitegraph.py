@@ -712,5 +712,5 @@ def _sql_column_placeholders(columns):
 
 
 def _distance_sort(row, point):
-    geometry = shape(json.loads(r["_geometry"]))
+    geometry = shape(json.loads(row["_geometry"]))
     return geometry.distance(point)
