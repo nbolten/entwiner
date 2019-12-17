@@ -3,8 +3,6 @@ from collections.abc import Mapping, MutableMapping
 
 import networkx as nx
 
-from ..exceptions import NodeNotFound
-
 
 class NodesView(Mapping):
     """An immutable mapping from node IDs to nodes. Used by NetworkX classes to iterate
@@ -19,10 +17,7 @@ class NodesView(Mapping):
         self.sqlitegraph = _sqlitegraph
 
     def __getitem__(self, key):
-        try:
-            return NodeView(key, _sqlitegraph=self.sqlitegraph)
-        except NodeNotFound:
-            raise nx.NodeNotFound
+        return NodeView(key, _sqlitegraph=self.sqlitegraph)
 
     def __iter__(self):
         query = self.sqlitegraph.conn.execute("SELECT _n FROM nodes")
@@ -46,10 +41,7 @@ class Nodes(MutableMapping):
         self.sqlitegraph = _sqlitegraph
 
     def __getitem__(self, key):
-        try:
-            return Node(key, _sqlitegraph=self.sqlitegraph)
-        except NodeNotFound:
-            raise nx.NodeNotFound
+        return Node(key, _sqlitegraph=self.sqlitegraph)
 
     def __iter__(self):
         query = self.sqlitegraph.conn.execute("SELECT _n FROM nodes")
@@ -85,7 +77,7 @@ class NodeView(Mapping):
         self.sqlitegraph = _sqlitegraph
 
         if _n is not None and not self.sqlitegraph.get_node(_n):
-            raise NodeNotFound(_n)
+            raise KeyError(f"Node {_n} not found")
 
     # TODO: consider that .items() requires two round trips - may want to override
     def __getitem__(self, key):
@@ -114,7 +106,7 @@ class Node(MutableMapping):
         self.sqlitegraph = _sqlitegraph
 
         if _n is not None and not self.sqlitegraph.get_node(_n):
-            raise NodeNotFound(_n)
+            raise KeyError(f"Node {_n} not found")
 
     def __getitem__(self, key):
         return self.sqlitegraph.get_node(self.n)[key]
