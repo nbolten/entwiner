@@ -60,7 +60,8 @@ class EdgeView(Mapping):
         self.u = _u
         self.v = _v
         self.ddict = dict()
-        self.ddict.update(kwargs)
+        if kwargs:
+            self.ddict.update(kwargs)
 
     def __getitem__(self, key):
         return self.ddict[key]
@@ -106,7 +107,8 @@ class Edge(EdgeView, MutableMapping):
         self.u = _u
         self.v = _v
         self.ddict = EdgeDict(_sqlitegraph=_sqlitegraph, _u=_u, _v=_v)
-        self.ddict.update(kwargs)
+        if kwargs:
+            self.ddict.update(kwargs)
 
     def __setitem__(self, key, value):
         self.ddict[key] = value

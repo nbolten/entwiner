@@ -118,6 +118,19 @@ class DiGraphDB(DiGraphDBView):
         super().__init__(*args, path=path, sqlitegraph=sqlitegraph, **kwargs)
         self.mutable = False
 
+    def iter_edges(self):
+        """Roughly equivalent to the .edges interface, but much faster.
+
+        :returns: generator of (u, v, d) similar to .edges, but where d is a
+                  dictionary, not an Edge that syncs to database.
+        :rtype: tuple generator
+
+        """
+        return (
+            (u, v, self.edge_attr_dict_factory(_u=u, _v=v))
+            for u, v, in self.sqlitegraph.iter_edge_ids()
+        )
+
     @classmethod
     def create_graph(cls, path, *args, **kwargs):
         sqlitegraph = SQLiteGraph(path)
