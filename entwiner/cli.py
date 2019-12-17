@@ -46,4 +46,7 @@ def entwiner(infiles, outfile, precision, changes_sign):
     #
     click.echo("Creating indices... ", nl=False)
     builder.reindex
+
+    builder.finalize_db()
+
     click.echo("Done")

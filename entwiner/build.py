@@ -14,18 +14,25 @@ class GraphBuilder:
         self.precision = precision
         self.changes_sign = changes_sign
         self.graph_class = graph_class
+        self.tempfile = None
 
         self.G = None
 
     # TODO: automatic cleanup if this fails.
     def create_temporary_db(self):
         _, path = tempfile.mkstemp()
+        self.tempfile = path
         G = self.graph_class.create_graph(path)
         self.G = G
+
+    def finalize_db(self):
+        os.rename(self.tempfile, self.G.sqlitegraph.path)
+        self.tempfile = None
 
     def remove_temporary_db(self):
         if os.path.exists(self.G.sqlitegraph.path):
             os.remove(self.G.sqlitegraph.path)
+        self.tempfile = None
 
     def get_G(self):
         return self.G
