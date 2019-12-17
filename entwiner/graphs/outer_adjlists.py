@@ -36,8 +36,8 @@ class OuterAdjlistView(Mapping):
     def items(self):
         # This method is overridden to avoid two round trips to the database.
         return (
-            (n, self.inner_adjlist_factory(_sqlitegraph=self.sqlitegraph, _key=n))
-            for n in self._iterator()
+            (n, self.inner_adjlist_factory(_sqlitegraph=self.sqlitegraph, _n=n))
+            for n in self.iterator()
         )
 
 
