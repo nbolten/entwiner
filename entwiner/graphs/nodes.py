@@ -3,6 +3,8 @@ from collections.abc import Mapping, MutableMapping
 
 import networkx as nx
 
+from ..exceptions import NodeNotFound
+
 
 class NodesView(Mapping):
     """An immutable mapping from node IDs to nodes. Used by NetworkX classes to iterate
@@ -105,8 +107,11 @@ class Node(MutableMapping):
         self.n = _n
         self.sqlitegraph = _sqlitegraph
 
-        if _n is not None and not self.sqlitegraph.get_node(_n):
-            raise KeyError(f"Node {_n} not found")
+        if _n is not None:
+            try:
+                self.sqlitegraph.get_node(_n)
+            except NodeNotFound:
+                raise KeyError(f"Node {_n} not found")
 
     def __getitem__(self, key):
         return self.sqlitegraph.get_node(self.n)[key]

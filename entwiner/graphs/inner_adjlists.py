@@ -26,7 +26,7 @@ class InnerAdjlistView(Mapping):
         self.size = getattr(self.sqlitegraph, self.id_iterator_str)
 
     def __getitem__(self, key):
-        return self.edge_factory(self.n, key)
+        return self.edge_factory(_u=self.n, _v=key)
 
     def __iter__(self):
         return self.id_iterator(self.n)
@@ -54,6 +54,10 @@ class InnerPredecessorsView(InnerAdjlistView):
 #
 class InnerSuccessors(InnerSuccessorsView, MutableMapping):
     edge_factory = Edge
+
+    def __init__(self, _sqlitegraph, _n):
+        super().__init__(_sqlitegraph=_sqlitegraph, _n=_n)
+        self.edge_factory = partial(Edge, _sqlitegraph=_sqlitegraph)
 
     def __setitem__(self, key, ddict):
         self.sqlitegraph.insert_or_replace_edge(self.n, key, ddict, commit=True)

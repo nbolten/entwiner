@@ -110,6 +110,10 @@ class Edge(EdgeView, MutableMapping):
         if kwargs:
             self.ddict.update(kwargs)
 
+    # def __iter__(self):
+    #     self.sync_from_db()
+    #     return super().__iter__()
+
     def __setitem__(self, key, value):
         self.ddict[key] = value
 
