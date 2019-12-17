@@ -1,5 +1,6 @@
 """Entwiner CLI."""
 import os
+import shutil
 import tempfile
 
 import entwiner
@@ -25,8 +26,8 @@ class GraphBuilder:
         G = self.graph_class.create_graph(path)
         self.G = G
 
-    def finalize_db(self):
-        os.rename(self.tempfile, self.G.sqlitegraph.path)
+    def finalize_db(self, path):
+        shutil.move(self.tempfile, path)
         self.tempfile = None
 
     def remove_temporary_db(self):
