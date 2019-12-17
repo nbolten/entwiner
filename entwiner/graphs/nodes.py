@@ -78,8 +78,11 @@ class NodeView(Mapping):
         self.n = _n
         self.sqlitegraph = _sqlitegraph
 
-        if _n is not None and not self.sqlitegraph.get_node(_n):
-            raise KeyError(f"Node {_n} not found")
+        if _n is not None:
+            try:
+                self.sqlitegraph.get_node(_n)
+            except NodeNotFound:
+                raise KeyError(f"Node {_n} not found")
 
     # TODO: consider that .items() requires two round trips - may want to override
     def __getitem__(self, key):
