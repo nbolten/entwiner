@@ -61,6 +61,13 @@ class InnerSuccessors(InnerSuccessorsView, MutableMapping):
     def __delitem__(self, key):
         self.sqlitegraph.delete_edges((self.n, key))
 
+    def items(self):
+        # This method is overridden to avoid two round trips to the database.
+        return (
+            (v, self.edge_factory(_sqlitegraph=self.sqlitegraph, _u=self.n, _v=v))
+            for v, row in self.iterator(self.n)
+        )
+
 
 class InnerPredecessors(InnerPredecessorsView, MutableMapping):
     edge_factory = Edge
@@ -70,3 +77,10 @@ class InnerPredecessors(InnerPredecessorsView, MutableMapping):
 
     def __delitem__(self, key):
         self.sqlitegraph.delete_edges((key, self.n))
+
+    def items(self):
+        # This method is overridden to avoid two round trips to the database.
+        return (
+            (u, self.edge_factory(_sqlitegraph=self.sqlitegraph, _u=u, _v=self.n))
+            for u, row in self.iterator(self.n)
+        )
