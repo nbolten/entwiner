@@ -20,10 +20,10 @@ class InnerAdjlistView(Mapping):
         self.sqlitegraph = _sqlitegraph
         self.n = _n
 
-        self.edge_factory = self.edge_factory
+        self.edge_factory = partial(self.edge_factory, _sqlitegraph=_sqlitegraph)
         self.id_iterator = getattr(self.sqlitegraph, self.id_iterator_str)
         self.iterator = getattr(self.sqlitegraph, self.iterator_str)
-        self.size = getattr(self.sqlitegraph, self.id_iterator_str)
+        self.size = getattr(self.sqlitegraph, self.size_str)
 
     def __getitem__(self, key):
         return self.edge_factory(_u=self.n, _v=key)

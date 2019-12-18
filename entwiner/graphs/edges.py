@@ -62,6 +62,8 @@ class EdgeView(Mapping):
         self.ddict = dict()
         if kwargs:
             self.ddict.update(kwargs)
+        else:
+            self.sync_from_db()
 
     def __getitem__(self, key):
         return self.ddict[key]
@@ -73,7 +75,7 @@ class EdgeView(Mapping):
         return len(self.ddict)
 
     def sync_from_db(self):
-        self.ddict = dict(self.sqlitegraph.get_edge_attr(u, v))
+        self.ddict = dict(self.sqlitegraph.get_edge_attr(self.u, self.v))
 
     def sync_to_db(self):
         raise ImmutableGraphError(

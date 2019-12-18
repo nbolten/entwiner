@@ -611,6 +611,7 @@ class SQLiteGraph:
 
     def len_successors_of(self, n):
         """Count number of edges that are successors of a given node."""
+        # FIXME: catch non-nodes (nonstrings) and return exception
         sql = "SELECT COUNT() c FROM edges WHERE _u = ?"
         query = self.execute(sql, (n,))
         return query.fetchone()["c"]
