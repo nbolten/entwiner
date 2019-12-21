@@ -13,9 +13,9 @@ If you use `pip` version 19 or greater, `entwiner` can be installed directly:
 
 `pip install git+https://github.com/nbolten/entwiner`
 
-If you have a version of `pip` lower than 19, you can install using `poetry` or render
-a pip-installable sdist using `poetry build`, which creates a pip-installable
-`dist/entwiner-*.tar.gz`.
+If you have a version of `pip` lower than 19, you can install using
+[`poetry`](https://python-poetry.org/docs/pyproject/) or render a pip-installable sdist
+using `poetry build`, which creates a pip-installable `dist/entwiner-*.tar.gz`.
 
 ### Initial usage
 
