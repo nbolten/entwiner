@@ -1,11 +1,15 @@
-# Editor stuff
+# editors
 *.swp
 
-# Python stuff
+# python
 __pycache__
 venv
+*.egg-info
 
-# Database stuff
+# poetry
+dist
+
+# database cruft
 *.db
 *.db.tmp
 *.db-journal

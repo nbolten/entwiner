@@ -1,0 +1,38 @@
+[tool.poetry]
+name = "entwiner"
+version = "0.1.0"
+description = "Build, use, and share routable transportation graphs using common geospatial data."
+authors = ["Nick Bolten <nbolten@gmail.com>"]
+license = "MIT"
+repository = "https://github.com/nbolten/entwiner"
+
+[tool.poetry.scripts]
+entwiner = "entwiner.cli:entwiner"
+
+[tool.poetry.dependencies]
+python = "^3.6"
+click = "^7.0"
+networkx = "^2.4"
+fiona = "^1.8.13"
+pyproj = "^2.4.2"
+shapely = "^1.6.4"
+
+[tool.poetry.dev-dependencies]
+pytest = "^5.2"
+black = "^19.10b0"
+pre-commit = "^1.20.0"
+
+[tool.black]
+exclude = """
+(
+  setup.py
+)
+"""
+
+[tool.dephell.main]
+from = {format = "poetry", path = "pyproject.toml"}
+to = {format = "setuppy", path = "setup.py"}
+
+[build-system]
+requires = ["poetry>=0.12"]
+build-backend = "poetry.masonry.api"
