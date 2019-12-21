@@ -23,3 +23,9 @@ autoformatter. `black` is automaticaly installed with `poetry install`.
 `entwiner` uses the [`dephell`](https://dephell.org) tool. For a variety of reasons
 (including depending on pre-alpha libraries), `dephell` should be installed globally
 and independently of your develpment setup, including `poetry`'s virtual environments.
+
+### Generating requirements.txt files
+
+For legacy purposes, requirements.txt and requirements-dev.txt files are automatically
+generated using `poetry`. No setup is required if you installed your environment using
+`poetry install`.
