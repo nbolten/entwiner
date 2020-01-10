@@ -677,18 +677,26 @@ class SQLiteGraph:
         rowids = ", ".join(str(r["rowid"]) for r in index_query)
 
         # TODO: put fast rowid-based lookup in G.sqlitegraph object.
-        query = self.execute(
+        rows = self.execute(
             f"""
-            SELECT rowid, *, AsGeoJSON(_geometry) _geometry
+            SELECT *, AsGeoJSON(_geometry) _geometry
               FROM edges
              WHERE rowid IN ({rowids})
         """
         )
 
+        # Note that this sorting strategy is inefficient, sorting the entire result
+        # and not using any distance-based tricks for optimal spitting-out of edges.
+        # TODO: Implement rtree-inspired real distance sort method using minheap
         if sort:
-            return sorted(query, key=lambda r: _distance_sort(r, point))
+            rows = sorted(rows, key=lambda r: _distance_sort(r, point))
 
-        return (r for r in query)
+        for row in rows:
+            d = {k: v for k, v in row.items() if v is not None}
+            u = d.pop("_u")
+            v = d.pop("_v")
+
+            yield (u, v, d)
 
 
 def _dict_factory(cursor, row):
@@ -712,6 +720,7 @@ def _sql_column_placeholders(columns):
     )
 
 
+# FIXME: do in meters, not lon-lat
 def _distance_sort(row, point):
     geometry = shape(json.loads(row["_geometry"]))
     return geometry.distance(point)
