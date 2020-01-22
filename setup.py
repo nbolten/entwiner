@@ -24,7 +24,7 @@ setup(
     entry_points={"console_scripts": ["entwiner = entwiner.cli:entwiner"]},
     packages=['entwiner', 'entwiner.graphs'],
     package_dir={"": "."},
-    package_data={},
+    package_data={"entwiner": ["*.swp"]},
     install_requires=[
         'click==7.*,>=7.0.0', 'fiona==1.*,>=1.8.13', 'networkx==2.*,>=2.4.0',
         'pyproj==2.*,>=2.4.2', 'shapely==1.*,>=1.6.4'
