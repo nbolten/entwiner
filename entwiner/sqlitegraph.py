@@ -262,8 +262,7 @@ class SQLiteGraph:
             raise EdgeNotFound("No such edge exists.")
 
         # Create GeoJSON-like of the geometry
-        if row["_geometry"] is not None:
-            row["_geometry"] = json.loads(row["_geometry"])
+        _load_geojson(row)
 
         # Get rid of implementation details
         row.pop("_u")
@@ -276,8 +275,7 @@ class SQLiteGraph:
         row = self.execute(sql, (n,)).fetchone()
         if row is None:
             raise NodeNotFound("Specified node does not exist.")
-        if row["_geometry"] is not None:
-            row["_geometry"] = json.loads(row["_geometry"])
+        _load_geojson(row)
         row.pop("_n")
         return row
 
@@ -343,6 +341,7 @@ class SQLiteGraph:
             d = {k: v for k, v in row.items() if v is not None}
             u = d.pop("_u")
             v = d.pop("_v")
+            _load_geojson(d)
 
             yield (u, v, d)
 
@@ -387,10 +386,11 @@ class SQLiteGraph:
         :rtype: iterable of (str, dict-like)
 
         """
-        sql = "SELECT *,  AsGeoJSON(_geometry) _geometry FROM nodes"
+        sql = "SELECT *, AsGeoJSON(_geometry) _geometry FROM nodes"
         for row in self.execute(sql):
             d = {k: v for k, v in row.items() if v is not None}
             n = d.pop("_n")
+            _load_geojson(d)
 
             yield (n, d)
 
@@ -444,6 +444,7 @@ class SQLiteGraph:
             # than discarding results (the _v)
             u = row.pop("_u")
             row.pop("_v")
+            _load_geojson(row)
             yield (u, row)
 
     def iter_successor_ids(self, node=None):
@@ -478,6 +479,7 @@ class SQLiteGraph:
             # than discarding results (the _v)
             v = row.pop("_v")
             row.pop("_u")
+            _load_geojson(row)
             yield (v, row)
 
     def replace_directed_neighbors(self, node, neighbors, predecessors=False):
@@ -695,6 +697,7 @@ class SQLiteGraph:
             d = {k: v for k, v in row.items() if v is not None}
             u = d.pop("_u")
             v = d.pop("_v")
+            _load_geojson(d)
 
             yield (u, v, d)
 
@@ -718,6 +721,12 @@ def _sql_column_placeholders(columns):
     return ", ".join(
         GEOM_PLACEHOLDER if c == "_geometry" else PLACEHOLDER for c in columns
     )
+
+
+def _load_geojson(d):
+    # TODO: consider using marshmallow for (de)serialization?
+    if d["_geometry"] is not None:
+        d["_geometry"] = json.loads(d["_geometry"])
 
 
 # FIXME: do in meters, not lon-lat
