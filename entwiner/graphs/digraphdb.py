@@ -106,7 +106,7 @@ class DiGraphDB(DiGraphDBView):
         # checking on initialization?
         if sqlitegraph is None:
             if path is None:
-                raise UnderSpecifiedGraphError()
+                raise UnderspecifiedGraphError()
             else:
                 if not os.path.exists(path):
                     raise UnderSpecifiedGraphError(
