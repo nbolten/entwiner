@@ -109,7 +109,7 @@ class DiGraphDB(DiGraphDBView):
                 raise UnderspecifiedGraphError()
             else:
                 if not os.path.exists(path):
-                    raise UnderSpecifiedGraphError(
+                    raise UnderspecifiedGraphError(
                         "DB file does not exist. Consider using DiGraphDB.create_graph"
                     )
 
