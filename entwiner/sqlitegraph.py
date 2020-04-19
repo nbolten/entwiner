@@ -207,6 +207,7 @@ class SQLiteGraph:
                 ebunch = []
 
     def add_node(self, n, ndict=None, commit=True):
+        self._add_columns_if_new_keys("nodes", ndict)
         keys, values = zip(*ndict.items())
 
         columns = _sql_column_list(("_n", *keys))
@@ -271,6 +272,10 @@ class SQLiteGraph:
         return {key: value for key, value in row.items() if value is not None}
 
     def get_node(self, n):
+        try:
+            hash(n)
+        except TypeError:
+            raise TypeError("Unhashable node id.")
         sql = "SELECT *, AsGeoJSON(_geometry) _geometry FROM nodes WHERE _n = ?"
         row = self.execute(sql, (n,)).fetchone()
         if row is None:
@@ -297,7 +302,11 @@ class SQLiteGraph:
         :type node: str
 
         """
-        return self._sql_any("SELECT _n FROM nodes WHERE _u = ? LIMIT 1", (n,))
+        try:
+            hash(n)
+        except TypeError:
+            raise TypeError("Invalid node id type.")
+        return self._sql_any("SELECT _n FROM nodes WHERE _n = ? LIMIT 1", (n,))
 
     def has_predecessors(self, node):
         """Test whether there are any predecessors for the given node.

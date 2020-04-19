@@ -40,6 +40,12 @@ class OuterAdjlistView(Mapping):
             for n in self.iterator()
         )
 
+    def __contains__(self, key):
+        # This method is overridden because __getitem__ doesn't  initially check for
+        # a key's presence.
+        # FIXME: should __getitem__ initially check for a key's presence?
+        return self.sqlitegraph.has_node(key)
+
 
 class OuterSuccessorsView(OuterAdjlistView):
     pass
@@ -60,7 +66,7 @@ class OuterSuccessors(OuterSuccessorsView, MutableMapping):
     inner_adjlist_factory = InnerSuccessors
 
     def __setitem__(self, key, ddict):
-        self.sqlitegraph.replace_successors(key, ((k, v) for k, v in ddict.items))
+        self.sqlitegraph.replace_successors(key, ((k, v) for k, v in ddict.items()))
 
     def __delitem__(self, key):
         self.sqlitegraph.delete_successors(key)
@@ -70,7 +76,7 @@ class OuterPredecessors(OuterPredecessorsView, MutableMapping):
     inner_adjlist_factory = InnerPredecessors
 
     def __setitem__(self, key, ddict):
-        self.sqlitegraph.replace_predecessors(key, ((k, v) for k, v in ddict.items))
+        self.sqlitegraph.replace_predecessors(key, ((k, v) for k, v in ddict.items()))
 
     def __delitem__(self, key):
         self.sqlitegraph.delete_predecessors(key)
