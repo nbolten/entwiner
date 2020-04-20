@@ -529,7 +529,7 @@ class SQLiteGraph:
         :type successors: iterable of 2-tuples
 
         """
-        self._replace_directed_neighbors(node, successors, predecessors=True)
+        self.replace_directed_neighbors(node, successors, predecessors=True)
 
     def replace_successors(self, node, successors):
         """Create a new set of successor edges, replacing any existing ones.
@@ -541,7 +541,7 @@ class SQLiteGraph:
         :type successors: iterable of 2-tuples
 
         """
-        self._replace_directed_neighbors(node, successors)
+        self.replace_directed_neighbors(node, successors)
 
     def set_node_attr(self, n, key, value):
         self._add_columns_if_new_keys("nodes", {key: value})
