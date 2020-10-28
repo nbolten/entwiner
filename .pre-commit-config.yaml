@@ -3,7 +3,7 @@ repos:
     rev: 19.10b0
     hooks:
     - id: black
-      language_version: python3.6
+      language_version: python3.8
       files: "^./setup.py"
 -   repo: https://github.com/mverteuil/precommit-dephell
     rev: d62e4fd01b6616a673d2305d6eb0f2bd45556996

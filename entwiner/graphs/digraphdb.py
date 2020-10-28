@@ -1,10 +1,12 @@
 """Dict-like interface(s) for graphs."""
 from functools import partial
 import os
+import uuid
 
 import networkx as nx
 
 from ..sqlitegraph import SQLiteGraph
+from ..geopackagenetwork import GeoPackageNetwork
 from ..exceptions import ImmutableGraphError, UnderspecifiedGraphError
 from .edges import Edge, EdgeView
 from .nodes import Nodes, NodesView
@@ -24,30 +26,30 @@ class DiGraphDBView(nx.DiGraph):
     adjlist_inner_dict_factory = dict
     edge_attr_dict_factory = EdgeView
 
-    def __init__(self, incoming_graph_data=None, path=None, sqlitegraph=None, **attr):
+    def __init__(self, incoming_graph_data=None, path=None, network=None, **attr):
         # Path attr overrides sqlite attr
         if path:
-            sqlitegraph = SQLiteGraph(path)
+            network = GeoPackageNetwork(path)
 
-        self.sqlitegraph = sqlitegraph
+        self.network = network
 
         # The factories of nx dict-likes need to be informed of the connection
         self.node_dict_factory = partial(
-            self.node_dict_factory, _sqlitegraph=sqlitegraph
+            self.node_dict_factory, _network=self.network
         )
         self.adjlist_outer_dict_factory = partial(
-            self.adjlist_outer_dict_factory, _sqlitegraph=sqlitegraph
+            self.adjlist_outer_dict_factory, _network=self.network
         )
         self.adjlist_inner_dict_factory = self.adjlist_inner_dict_factory
         self.edge_attr_dict_factory = partial(
-            self.edge_attr_dict_factory, _sqlitegraph=sqlitegraph
+            self.edge_attr_dict_factory, _network=self.network
         )
 
         # FIXME: should use a persistent table/container for .graph as well.
         self.graph = {}
         self._node = self.node_dict_factory()
         self._succ = self._adj = self.adjlist_outer_dict_factory()
-        self._pred = OuterPredecessorsView(_sqlitegraph=self.sqlitegraph)
+        self._pred = OuterPredecessorsView(_network=self.network)
 
         if incoming_graph_data is not None:
             nx.convert.to_networkx_graph(incoming_graph_data, create_using=self)
@@ -58,7 +60,7 @@ class DiGraphDBView(nx.DiGraph):
 
     def size(self, weight=None):
         if weight is None:
-            return self.sqlitegraph.len_edges()
+            return len(self.network.edges)
         else:
             return super().size(weight=weight)
 
@@ -72,15 +74,19 @@ class DiGraphDBView(nx.DiGraph):
         """
         return (
             (u, v, self.edge_attr_dict_factory(_u=u, _v=v, **d))
-            for u, v, d in self.sqlitegraph.iter_edges()
+            for u, v, d in self.network.edges
         )
 
     def edges_dwithin(self, lon, lat, distance, sort=False):
-        return self.sqlitegraph.edges_dwithin(lon, lat, distance, sort=sort)
+        # TODO: document self.network.edges instead?
+        return self.network.edges.dwithin(lon, lat, distance, sort=sort)
 
     def to_in_memory(self):
-        new_sqlitegraph = self.sqlitegraph.to_in_memory()
-        return self.__class__(sqlitegraph=new_sqlitegraph)
+        # TODO: make into 'copy' method instead, taking path as a parameter?
+        db_id = uuid.uuid4()
+        path = f"file:entwiner-{db_id}?mode=memory&cache=shared"
+        new_network = self.network.copy(path)
+        return self.__class__(network=new_network)
 
 
 class DiGraphDB(DiGraphDBView):
@@ -101,10 +107,11 @@ class DiGraphDB(DiGraphDBView):
     adjlist_inner_dict_factory = dict
     edge_attr_dict_factory = Edge
 
-    def __init__(self, *args, path=None, sqlitegraph=None, **kwargs):
+    def __init__(self, *args, path=None, network=None, **kwargs):
         # TODO: Consider adding database file existence checker rather than always
         # checking on initialization?
-        if sqlitegraph is None:
+        if network is None:
+            # FIXME: should path be allowed to be None?
             if path is None:
                 raise UnderspecifiedGraphError()
             else:
@@ -113,10 +120,10 @@ class DiGraphDB(DiGraphDBView):
                         "DB file does not exist. Consider using DiGraphDB.create_graph"
                     )
 
-                sqlitegraph = SQLiteGraph(path)
+                network = GeoPackageNetwork(path)
 
-        super().__init__(*args, path=path, sqlitegraph=sqlitegraph, **kwargs)
-        self.mutable = False
+        super().__init__(*args, path=path, network=network, **kwargs)
+        self.mutable = True
 
     def iter_edges(self):
         """Roughly equivalent to the .edges interface, but much faster.
@@ -126,22 +133,23 @@ class DiGraphDB(DiGraphDBView):
         :rtype: tuple generator
 
         """
+        # TODO: investigate performance of iterating over self.network.edges vs.
+        # a dedicated u-v only iterator.
         return (
             (u, v, self.edge_attr_dict_factory(_u=u, _v=v))
-            for u, v, in self.sqlitegraph.iter_edge_ids()
+            for u, v, d in self.network.edges
         )
 
     @classmethod
-    def create_graph(cls, path, *args, **kwargs):
-        sqlitegraph = SQLiteGraph(path)
-        sqlitegraph._create_graph()
-        return DiGraphDB(sqlitegraph=sqlitegraph, *args, **kwargs)
+    def create_graph(cls, *args, path=None, **kwargs):
+        network = GeoPackageNetwork(path)
+        return DiGraphDB(network=network, *args, **kwargs)
 
-    def add_edges_from(self, ebunch_to_add, _batch_size=1000, counter=None, **attr):
+    def add_edges_from(self, ebunch, _batch_size=1000, counter=None, **attr):
         """Equivalent to add_edges_from in networkx but with batched SQL writes.
 
-        :param ebunch_to_add: edge bunch, identical to nx ebunch_to_add.
-        :type ebunch_to_add: edge bunch
+        :param ebunch: edge bunch, identical to nx ebunch_to_add.
+        :type ebunch: edge bunch
         :param _batch_size: Number of rows to commit to the database at a time.
         :type _batch_size: int
         :param attr: Default attributes, identical to nx attr.
@@ -153,10 +161,11 @@ class DiGraphDB(DiGraphDBView):
             super().add_edges_from(self, ebunch_to_add, **attr)
             return
 
-        self.sqlitegraph.add_edges_batched(ebunch_to_add, _batch_size, counter=counter)
+        # TODO: length check on each edge
+        features = ({"_u": edge[0], "_v": edge[1], **edge[2]} for edge in ebunch)
+        self.network.edges.write_features(features, batch_size=_batch_size, counter=counter)
 
     def update_edges(self, ebunch):
-        return self.sqlitegraph.update_edges(ebunch)
-
-    def reindex(self):
-        self.sqlitegraph.reindex()
+        # FIXME: this doesn't actually work. Implement update / upsert logic for
+        # GeoPackage feature tables, then use that.
+        return self.network.edges.update(ebunch)

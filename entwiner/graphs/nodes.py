@@ -10,58 +10,62 @@ class NodesView(Mapping):
     """An immutable mapping from node IDs to nodes. Used by NetworkX classes to iterate
     over nodes.
 
-    :param _sqlitegraph: The SQLite-backed graph class.
-    :type _sqlitegraph: entwiner.SqliteGraph
+    :param _network: The SQLite-backed graph class.
+    :type _network: entwiner.SqliteGraph
 
     """
 
-    def __init__(self, _sqlitegraph=None, *args, **kwargs):
-        self.sqlitegraph = _sqlitegraph
+    def __init__(self, _network=None, *args, **kwargs):
+        self.network = _network
 
     def __getitem__(self, key):
-        return NodeView(key, _sqlitegraph=self.sqlitegraph)
+        return NodeView(key, _network=self.network)
 
     def __iter__(self):
-        query = self.sqlitegraph.conn.execute("SELECT _n FROM nodes")
-        return (row["_n"] for row in query)
+        with self.network.gpkg.connect() as conn:
+            query = conn.execute("SELECT _n FROM nodes")
+            return (row["_n"] for row in query)
 
     def __len__(self):
-        query = self.sqlitegraph.conn.execute("SELECT count(*) count FROM nodes")
-        return query.fetchone()["count"]
+        with self.network.gpkg.connect() as conn:
+            query = conn.execute("SELECT count(*) count FROM nodes")
+            return query.fetchone()["count"]
 
 
 class Nodes(MutableMapping):
     """A mapping from node IDs to nodes. Used by NetworkX classes to iterate over and
     insert nodes.
 
-    :param _sqlitegraph: The SQLite-backed graph class.
-    :type _sqlitegraph: entwiner.SqliteGraph
+    :param _network: The SQLite-backed graph class.
+    :type _network: entwiner.SqliteGraph
 
     """
 
-    def __init__(self, _sqlitegraph=None, *args, **kwargs):
-        self.sqlitegraph = _sqlitegraph
+    def __init__(self, _network=None, *args, **kwargs):
+        self.network = _network
 
     def __getitem__(self, key):
-        return Node(key, _sqlitegraph=self.sqlitegraph)
+        return Node(key, _network=self.network)
 
     def __iter__(self):
-        query = self.sqlitegraph.conn.execute("SELECT _n FROM nodes")
-        return (row["_n"] for row in query)
+        with self.network.gpkg.connect() as conn:
+            query = conn.execute("SELECT _n FROM nodes")
+            return (row["_n"] for row in query)
 
     def __len__(self):
-        query = self.sqlitegraph.conn.execute("SELECT count(*) count FROM nodes")
-        return query.fetchone()["count"]
+        with self.network.gpkg.connect() as conn:
+            query = conn.execute("SELECT count(*) count FROM nodes")
+            return query.fetchone()["count"]
 
     def __setitem__(self, key, ddict):
         if key in self:
-            self.sqlitegraph.update_node(key, ddict)
+            self.network.update_node(key, ddict)
         else:
-            self.sqlitegraph.add_node(key, ddict)
+            self.network.add_node(key, ddict)
 
     def __delitem__(self, key):
         if key in self:
-            self.sqlitegraph.delete_node(key)
+            self.network.delete_node(key)
         else:
             raise KeyError(key)
 
@@ -69,30 +73,34 @@ class Nodes(MutableMapping):
 class NodeView(Mapping):
     """Retrieves node attributes from table, but does not allow assignment.
 
-    :param _sqlitegraph: The SQLite-backed graph class.
-    :type _sqlitegraph: entwiner.SqliteGraph
+    :param _network: The SQLite-backed graph class.
+    :type _network: entwiner.SqliteGraph
 
     """
 
-    def __init__(self, _n=None, _sqlitegraph=None, *args, **kwargs):
+    def __init__(self, _n=None, _network=None, *args, **kwargs):
         self.n = _n
-        self.sqlitegraph = _sqlitegraph
+        self.network = _network
 
         if _n is not None:
             try:
-                self.sqlitegraph.get_node(_n)
+                # TODO: store the data!
+                self.network.nodes.get_node(_n)
             except NodeNotFound:
                 raise KeyError(f"Node {_n} not found")
 
     # TODO: consider that .items() requires two round trips - may want to override
     def __getitem__(self, key):
-        return self.sqlitegraph.get_node(self.n)[key]
+        try:
+            return self.network.nodes.get_node(self.n)[key]
+        except NodeNotFound:
+            return KeyError(key)
 
     def __iter__(self):
-        return iter(self.sqlitegraph.get_node(self.n).keys())
+        return iter(self.network.nodes.get_node(self.n).keys())
 
     def __len__(self):
-        return len(self.sqlitegraph.get_node(self.n))
+        return len(self.network.nodes.get_node(self.n))
 
 
 # TODO: use Mapping (mutable?) abstract base class for dict-like magic
@@ -101,35 +109,35 @@ class Node(MutableMapping):
 
     :param n: Node ID.
     :type n: str
-    :param _sqlitegraph: The SQLite-backed graph class.
-    :type _sqlitegraph: entwiner.SqliteGraph
+    :param _network: The SQLite-backed graph class.
+    :type _network: entwiner.SqliteGraph
 
     """
 
-    def __init__(self, _n=None, _sqlitegraph=None, *args, **kwargs):
+    def __init__(self, _n=None, _network=None, *args, **kwargs):
         self.n = _n
-        self.sqlitegraph = _sqlitegraph
+        self.network = _network
 
         if _n is not None:
             try:
-                self.sqlitegraph.get_node(_n)
+                self.network.nodes.get_node(_n)
             except NodeNotFound:
                 raise KeyError(f"Node {_n} not found")
 
     def __getitem__(self, key):
-        return self.sqlitegraph.get_node(self.n)[key]
+        return self.network.nodes.get_node(self.n)[key]
 
     def __iter__(self):
-        return iter(self.sqlitegraph.get_node(self.n).keys())
+        return iter(self.network.nodes.get_node(self.n).keys())
 
     def __len__(self):
-        return len(self.sqlitegraph.get_node(self.n))
+        return len(self.network.nodes.get_node(self.n))
 
     def __setitem__(self, key, value):
-        self.sqlitegraph.set_node_attr(self.n, key, value)
+        self.network.set_node_attr(self.n, key, value)
 
     def __delitem__(self, key):
         if key in self:
-            self.sqlitegraph.set_node_attr(self.n, key, None)
+            self.network.set_node_attr(self.n, key, None)
         else:
             raise KeyError(key)

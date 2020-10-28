@@ -13,3 +13,6 @@ dist
 *.db
 *.db.tmp
 *.db-journal
+*.gpkg
+*.gpkg-shm
+*.gpkg-wal

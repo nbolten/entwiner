@@ -1,4 +1,3 @@
-"""Entwiner CLI."""
 import os
 import shutil
 import tempfile
@@ -21,19 +20,34 @@ class GraphBuilder:
 
     # TODO: automatic cleanup if this fails.
     def create_temporary_db(self):
+        # self.G = self.graph_class.create_graph()
         _, path = tempfile.mkstemp()
+        path = str(path)
+        os.remove(path)
+        path = f"{path}.gpkg"
+        G = self.graph_class.create_graph(path=path)
         self.tempfile = path
-        G = self.graph_class.create_graph(path)
         self.G = G
 
     def finalize_db(self, path):
+        # FIXME: implement proper interface / paradigm for overwriting geopackages
+        #        Consider creating path.gpkg.build temporary file
+
+        # TODO: place the rtree step somewhere else?
+        self.G.network.edges.add_rtree()
+        self.G.network.nodes.add_rtree()
+
+        if os.path.exists(path):
+            os.remove(path)
+        # self.G.network.copy(path)
         shutil.move(self.tempfile, path)
+        self.G.network.gpkg.path = path
         self.tempfile = None
 
-    def remove_temporary_db(self):
-        if os.path.exists(self.G.sqlitegraph.path):
-            os.remove(self.G.sqlitegraph.path)
-        self.tempfile = None
+    # def remove_temporary_db(self):
+    #     if os.path.exists(self.G.sqlitegraph.path):
+    #         os.remove(self.G.sqlitegraph.path)
+    #     self.tempfile = None
 
     def get_G(self):
         return self.G

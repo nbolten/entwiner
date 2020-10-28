@@ -8,24 +8,24 @@ from entwiner.exceptions import ImmutableGraphError, UninitializedEdgeError
 class EdgeDict(MutableMapping):
     """A mutable mapping that always syncs to/from the database edges table."""
 
-    def __init__(self, _sqlitegraph=None, _u=None, _v=None):
-        self.sqlitegraph = _sqlitegraph
+    def __init__(self, _network=None, _u=None, _v=None):
+        self.network = _network
         self.u = _u
         self.v = _v
 
     def __getitem__(self, key):
-        return self.sqlitegraph.get_edge_attr(self.u, self.v)[key]
+        return self.network.edges.get_edge(self.u, self.v)[key]
 
     def __iter__(self):
         # TODO: speed up by directly asking for keys for this row?
-        return iter(self.sqlitegraph.get_edge_attr(self.u, self.v))
+        return iter(self.network.edges.get_edge(self.u, self.v))
 
     def __len__(self):
         return len(self.keys())
 
     def __setitem__(self, key, value):
         if self.u is not None and self.v is not None:
-            self.sqlitegraph.set_edge_attr(self.u, self.v, key, value)
+            self.network.edges.update(self.u, self.v, {key: value})
         else:
             raise UninitializedEdgeError(
                 "Attempted to set attrs on uninitialized edge."
@@ -33,7 +33,7 @@ class EdgeDict(MutableMapping):
 
     def __delitem__(self, key):
         if self.u is not None and self.v is not None:
-            self.sqlitegraph.set_edge_attr(self.u, self.v, key, None)
+            self.network.edges.update(self.u, self.v, {key: None})
         else:
             raise UninitializedEdgeError(
                 "Attempted to delete attrs on uninitialized edge."
@@ -44,8 +44,8 @@ class EdgeView(Mapping):
     """Read-only edge attributes that can be updated from the SQLite database or
     initialized with kwargs (kwargs will be stored in-memory).
 
-    :param _sqlitegraph: SQLiteGraph used for interacting with underlying graph db.
-    :type _sqlitegraph: SQLiteGraph
+    :param _network: SQLiteGraph used for interacting with underlying graph db.
+    :type _network: SQLiteGraph
     :param _u: first node describing (u, v) edge.
     :type _u: str
     :param _v: second node describing (u, v) edge.
@@ -55,8 +55,8 @@ class EdgeView(Mapping):
 
     """
 
-    def __init__(self, _sqlitegraph=None, _u=None, _v=None, **kwargs):
-        self.sqlitegraph = _sqlitegraph
+    def __init__(self, _network=None, _u=None, _v=None, **kwargs):
+        self.network = _network
         self.u = _u
         self.v = _v
         self.ddict = dict()
@@ -75,7 +75,7 @@ class EdgeView(Mapping):
         return len(self.ddict)
 
     def sync_from_db(self):
-        self.ddict = dict(self.sqlitegraph.get_edge_attr(self.u, self.v))
+        self.ddict = dict(self.network.edges.get_edge(self.u, self.v))
 
     def sync_to_db(self):
         raise ImmutableGraphError(
@@ -83,9 +83,9 @@ class EdgeView(Mapping):
         )
 
     @classmethod
-    def from_db(cls, sqlitegraph, u, v):
+    def from_db(cls, network, u, v):
         return cls(
-            _sqlitegraph=sqlitegraph, _u=u, _v=v, **self.sqlitegraph.get_edge_attr(u, v)
+            _network=network, _u=u, _v=v, **self.network.edges.get_edge(self.u, self.v)
         )
 
 
@@ -93,8 +93,8 @@ class Edge(EdgeView, MutableMapping):
     """Edge attributes that can be updated from the SQLite database or initialized with
     kwargs (kwargs will be stored in-memory).
 
-    :param _sqlitegraph: SQLiteGraph used for interacting with underlying graph db.
-    :type _sqlitegraph: SQLiteGraph
+    :param _network: SQLiteGraph used for interacting with underlying graph db.
+    :type _network: SQLiteGraph
     :param _u: first node describing (u, v) edge.
     :type _u: str
     :param _v: second node describing (u, v) edge.
@@ -104,11 +104,11 @@ class Edge(EdgeView, MutableMapping):
 
     """
 
-    def __init__(self, *args, _sqlitegraph=None, _u=None, _v=None, **kwargs):
-        self.sqlitegraph = _sqlitegraph
+    def __init__(self, *args, _network=None, _u=None, _v=None, **kwargs):
+        self.network = _network
         self.u = _u
         self.v = _v
-        self.ddict = EdgeDict(_sqlitegraph=_sqlitegraph, _u=_u, _v=_v)
+        self.ddict = EdgeDict(_network=_network, _u=_u, _v=_v)
         if kwargs:
             self.ddict.update(kwargs)
 
@@ -123,4 +123,4 @@ class Edge(EdgeView, MutableMapping):
         del self.ddict[key]
 
     def sync_to_db(self):
-        self.sqlitegraph.insert_or_replace_edge(self.u, self.v, self.ddict)
+        self.network.insert_or_replace_edge(self.u, self.v, self.ddict)

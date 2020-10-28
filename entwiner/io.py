@@ -14,7 +14,7 @@ def edge_generator(path, precision, changes_sign=None, add_reverse=False):
 
     def edge_from_feature(feature):
         props = {k: v for k, v in f["properties"].items() if v is not None}
-        props["_geometry"] = f["geometry"]
+        props["geom"] = f["geometry"]
         props["_layer"] = layer
         props = {k: v for k, v in props.items() if v is not None}
 
@@ -38,7 +38,7 @@ def edge_generator(path, precision, changes_sign=None, add_reverse=False):
                 yield u, v, props
                 if add_reverse:
                     props = {**props}
-                    props["_geometry"] = reverse_linestring(
+                    props["geom"] = reverse_linestring(
                         f["geometry"]["coordinates"]
                     )
                     for change_sign in changes_sign:

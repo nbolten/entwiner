@@ -1,6 +1,10 @@
+from collections import OrderedDict
 import json
+import os
 import sqlite3
+import tempfile
 
+import fiona
 from shapely.geometry import shape, Point
 
 from .geom import wkt_linestring, wkt_point
@@ -12,16 +16,18 @@ GEOM_PLACEHOLDER = "GeomFromText(?, 4326)"
 
 
 class SQLiteGraph:
-    def __init__(self, path):
+    def __init__(self, path=None):
         self.path = path
+        if (self.path is None) or (not os.path.exists(path)):
+            self._create_tmp_graph()
         self.conn = self.connect()
 
     def connect(self):
         conn = sqlite3.connect(self.path)
         conn.row_factory = _dict_factory
         # conn.row_factory = sqlite3.Row
-        conn.enable_load_extension(True)
-        conn.load_extension("mod_spatialite.so")
+        # conn.enable_load_extension(True)
+        # conn.load_extension("mod_spatialite.so")
         return conn
 
     def execute(self, sql, values=(), commit=False):
@@ -89,14 +95,75 @@ class SQLiteGraph:
 
         return new_db
 
-    def _create_graph(self):
+    def _move_graph(self, path):
+        os.rename(self.path, path)
+        self.path = path
+
+    def _create_tmp_graph(self):
+        # Create a temporary path, get the name
+        _, path = tempfile.mkstemp(suffix=".gpkg")
+        # Delete the path because fiona doesn't like preexisting files.
+        os.remove(path)
+
+        # dirname, filename = os.path.split(self.path)
+        # path = "." + filename
+
+        config = {
+            "driver": "GPKG",
+            "crs": "epsg:4326",
+        }
+
+        # TODO: consider creating metadata table to support multiple layers, create
+        # edges view? Benchmark performance.
+
+        # Create edges table
+        with fiona.open(
+            path,
+            "w",
+            layer="edges",
+            schema= {
+                "geometry": "LineString",
+                "properties": OrderedDict((
+                    ("_u", "str"),
+                    ("_v", "str"),
+                    ("_source", "str"),
+                    ("_length", "float"),
+                )),
+            },
+            **config
+        ):
+            pass
+
+        # Create nodes table
+        with fiona.open(
+            path,
+            "w",
+            layer="nodes",
+            schema = {
+                "geometry": "Point",
+                "properties": OrderedDict((
+                    ("_n", "str"),
+                )),
+            },
+            **config
+        ):
+            pass
+
+        if self.path is None:
+            self.path = path
+        else:
+            self._move_graph(self.path)
+
+        # GeoPackage should now exist but have no records.
+
+
         # Create the tables
-        query = self.execute("PRAGMA table_info('spatial_ref_sys')")
-        if query.fetchone() is None:
-            self.execute("SELECT InitSpatialMetaData(1)")
-            self.commit()
-        self._create_edge_table()
-        self._create_node_table()
+        # query = self.execute("PRAGMA table_info('spatial_ref_sys')")
+        # if query.fetchone() is None:
+        #     self.execute("SELECT InitSpatialMetaData(1)")
+        #     self.commit()
+        # self._create_edge_table()
+        # self._create_node_table()
 
     def _create_edge_table(self):
         sql = (
@@ -170,7 +237,8 @@ class SQLiteGraph:
                 v_wkt = wkt_point(lon_v, lat_v)
                 d["_geometry"] = wkt_linestring(d["_geometry"]["coordinates"])
 
-            self._add_columns_if_new_keys("edges", d, commit=False)
+            # FIXME: delete records if they already exist!
+            # self._add_columns_if_new_keys("edges", d, commit=False)
             self.insert_or_replace_edge(u, v, d, commit=False)
 
             # TODO: allow overriding node IDs during insert of edges, e.g. when
@@ -188,11 +256,22 @@ class SQLiteGraph:
         self.add_edges(((u, v, ddict),))
 
     def add_edges_batched(self, ebunch_to_add, batch_size=10000, counter=None, **attr):
+        columns = set(self.get_columns())
+
         ebunch_iter = iter(ebunch_to_add)
         ebunch = []
         while True:
             try:
                 edge = next(ebunch_to_add)
+                new_columns = columns - set(edge["properties"].keys())
+                if new_columns:
+                    # Write queued records
+                    self.add_edges(ebunch, **attr)
+                    ebunch = []
+                    # Add the columns
+                    for column in new_columns:
+                        coltype = self.get_column_type(edge[column])
+                        self.edge_schema.properties[column] = coltype
                 ebunch.append(edge)
             except StopIteration:
                 self.add_edges(ebunch, **attr)
