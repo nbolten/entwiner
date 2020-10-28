@@ -16,7 +16,7 @@ networkx = "^2.4"
 fiona = "^1.8.13"
 pyproj = "^2.4.2"
 shapely = "^1.6.4"
-geomet = "^0.2.1"
+geomet = "^0.2.1.post1"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
