@@ -45,7 +45,9 @@ def entwiner(infiles, outfile, precision, changes_sign):
     # Reindex, as indices may have been dropped during import.
     #
     click.echo("Creating indices... ", nl=False)
-    builder.reindex
+    # FIXME: Move this behavior to implicit in DiGraphDB function?
+    builder.G.network.edges.add_rtree()
+    builder.G.network.nodes.add_rtree()
 
     builder.finalize_db(outfile)
 

@@ -41,11 +41,12 @@ class EdgeDict(MutableMapping):
 
 
 class EdgeView(Mapping):
-    """Read-only edge attributes that can be updated from the SQLite database or
-    initialized with kwargs (kwargs will be stored in-memory).
+    """Read-only edge attributes that can be updated from the GeoPackage
+    (SQLite) database or initialized with kwargs (kwargs will be stored
+    in-memory).
 
-    :param _network: SQLiteGraph used for interacting with underlying graph db.
-    :type _network: SQLiteGraph
+    :param _network: GeoPackageNetwork used for interacting with underlying graph db.
+    :type _network: entwiner.GeoPackageNetwork
     :param _u: first node describing (u, v) edge.
     :type _u: str
     :param _v: second node describing (u, v) edge.
@@ -93,8 +94,8 @@ class Edge(EdgeView, MutableMapping):
     """Edge attributes that can be updated from the SQLite database or initialized with
     kwargs (kwargs will be stored in-memory).
 
-    :param _network: SQLiteGraph used for interacting with underlying graph db.
-    :type _network: SQLiteGraph
+    :param _network: GeoPackageNetwork used for interacting with underlying graph db.
+    :type _network: entwiner.GeoPackageNetwork
     :param _u: first node describing (u, v) edge.
     :type _u: str
     :param _v: second node describing (u, v) edge.

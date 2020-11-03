@@ -1,7 +1,5 @@
-"""Reusable sqlite-backed Node container(s)."""
+"""Reusable GeoPackage-backed Node container(s)."""
 from collections.abc import Mapping, MutableMapping
-
-import networkx as nx
 
 from ..exceptions import NodeNotFound
 
@@ -10,8 +8,9 @@ class NodesView(Mapping):
     """An immutable mapping from node IDs to nodes. Used by NetworkX classes to iterate
     over nodes.
 
-    :param _network: The SQLite-backed graph class.
-    :type _network: entwiner.SqliteGraph
+    :param _network: Underlying graph container with the same signature as
+                     entwiner.GeoPackageNetwork.
+    :type _network: entwiner.GeoPackageNetwork
 
     """
 
@@ -36,8 +35,9 @@ class Nodes(MutableMapping):
     """A mapping from node IDs to nodes. Used by NetworkX classes to iterate over and
     insert nodes.
 
-    :param _network: The SQLite-backed graph class.
-    :type _network: entwiner.SqliteGraph
+    :param _network: Underlying graph container with the same signature as
+                     entwiner.GeoPackageNetwork.
+    :type _network: entwiner.GeoPackageNetwork
 
     """
 
@@ -73,8 +73,9 @@ class Nodes(MutableMapping):
 class NodeView(Mapping):
     """Retrieves node attributes from table, but does not allow assignment.
 
-    :param _network: The SQLite-backed graph class.
-    :type _network: entwiner.SqliteGraph
+    :param _network: Underlying graph container with the same signature as
+                     entwiner.GeoPackageNetwork.
+    :type _network: entwiner.GeoPackageNetwork
 
     """
 
@@ -109,8 +110,9 @@ class Node(MutableMapping):
 
     :param n: Node ID.
     :type n: str
-    :param _network: The SQLite-backed graph class.
-    :type _network: entwiner.SqliteGraph
+    :param _network: Underlying graph container with the same signature as
+                     entwiner.GeoPackageNetwork.
+    :type _network: entwiner.GeoPackageNetwork
 
     """
 

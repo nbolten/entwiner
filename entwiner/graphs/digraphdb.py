@@ -5,7 +5,6 @@ import uuid
 
 import networkx as nx
 
-from ..sqlitegraph import SQLiteGraph
 from ..geopackagenetwork import GeoPackageNetwork
 from ..exceptions import ImmutableGraphError, UnderspecifiedGraphError
 from .edges import Edge, EdgeView
@@ -34,9 +33,7 @@ class DiGraphDBView(nx.DiGraph):
         self.network = network
 
         # The factories of nx dict-likes need to be informed of the connection
-        self.node_dict_factory = partial(
-            self.node_dict_factory, _network=self.network
-        )
+        self.node_dict_factory = partial(self.node_dict_factory, _network=self.network)
         self.adjlist_outer_dict_factory = partial(
             self.adjlist_outer_dict_factory, _network=self.network
         )
@@ -95,8 +92,8 @@ class DiGraphDB(DiGraphDBView):
     :type args: array-like
     :param path: An optional path to database file (or :memory:-type string).
     :type path: str
-    :param sqlitegraph: An optional path to a custom SQLiteGraph instance.
-    :type sqlitegraph: SQLiteGraph
+    :param network: An optional path to a custom GeoPackageNetwork instance.
+    :type network: entwiner.GeoPackageNetwork
     :param kwargs: Keyword arguments compatible with networkx.DiGraph.
     :type kwargs: dict-like
     """
@@ -125,21 +122,6 @@ class DiGraphDB(DiGraphDBView):
         super().__init__(*args, path=path, network=network, **kwargs)
         self.mutable = True
 
-    def iter_edges(self):
-        """Roughly equivalent to the .edges interface, but much faster.
-
-        :returns: generator of (u, v, d) similar to .edges, but where d is a
-                  dictionary, not an Edge that syncs to database.
-        :rtype: tuple generator
-
-        """
-        # TODO: investigate performance of iterating over self.network.edges vs.
-        # a dedicated u-v only iterator.
-        return (
-            (u, v, self.edge_attr_dict_factory(_u=u, _v=v))
-            for u, v, d in self.network.edges
-        )
-
     @classmethod
     def create_graph(cls, *args, path=None, **kwargs):
         network = GeoPackageNetwork(path)
@@ -163,7 +145,9 @@ class DiGraphDB(DiGraphDBView):
 
         # TODO: length check on each edge
         features = ({"_u": edge[0], "_v": edge[1], **edge[2]} for edge in ebunch)
-        self.network.edges.write_features(features, batch_size=_batch_size, counter=counter)
+        self.network.edges.write_features(
+            features, batch_size=_batch_size, counter=counter
+        )
 
     def update_edges(self, ebunch):
         # FIXME: this doesn't actually work. Implement update / upsert logic for

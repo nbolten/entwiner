@@ -1,4 +1,4 @@
-import os
+mport os
 import shutil
 import tempfile
 
@@ -44,11 +44,6 @@ class GraphBuilder:
         self.G.network.gpkg.path = path
         self.tempfile = None
 
-    # def remove_temporary_db(self):
-    #     if os.path.exists(self.G.sqlitegraph.path):
-    #         os.remove(self.G.sqlitegraph.path)
-    #     self.tempfile = None
-
     def get_G(self):
         return self.G
 
@@ -60,6 +55,3 @@ class GraphBuilder:
             add_reverse=True,
         )
         self.G.add_edges_from(edge_gen, _batch_size=batch_size, counter=counter)
-
-    def reindex(self):
-        self.G.reindex()

@@ -38,7 +38,9 @@ class FeatureTable:
 
         self.add_srs()
 
-        self.transformer = pyproj.Transformer.from_crs(f"epsg:{self.srid}", f"epsg:{TO_SRID}", always_xy=True)
+        self.transformer = pyproj.Transformer.from_crs(
+            f"epsg:{self.srid}", f"epsg:{TO_SRID}", always_xy=True
+        )
 
     def create_tables(self):
         """Initialize the feature_table's tables, as they do not yet exist."""
@@ -48,7 +50,8 @@ class FeatureTable:
         #        Should indicate a bad GeoPackage.
         # TODO: catch case where feature_table has already been added
         with self.gpkg.connect() as conn:
-            conn.execute("""
+            conn.execute(
+                """
                 INSERT INTO gpkg_contents
                             (
                                 table_name,
@@ -62,15 +65,18 @@ class FeatureTable:
                          ?,
                          ?
                      )
-            """, (self.name, self.name, self.srid))
+            """,
+                (self.name, self.name, self.srid),
+            )
 
             # TODO: implement 'feature_count' column logic for gpkg_ogr_contents.
             conn.execute(
                 "INSERT INTO gpkg_ogr_contents ( table_name ) VALUES ( ? )",
-                (self.name,)
+                (self.name,),
             )
 
-            conn.execute(f"""
+            conn.execute(
+                f"""
                 INSERT INTO gpkg_geometry_columns
                             (
                                 table_name,
@@ -81,30 +87,29 @@ class FeatureTable:
                                 m
                             )
                      VALUES (?, ?, ?, ?, ?, ?)
-            """, (self.name, self.geom_column, self.geom_type, self.srid, 0, 0))
-            conn.execute(f"""
+            """,
+                (self.name, self.geom_column, self.geom_type, self.srid, 0, 0),
+            )
+            conn.execute(
+                f"""
                 CREATE TABLE {self.name} (
                     {self.primary_key} INTEGER,
                     {self.geom_column} TEXT,
                     PRIMARY KEY ({self.primary_key})
                 )
-            """)
+            """
+            )
 
     def drop_tables(self):
         with self.gpkg.connect() as conn:
-            conn.execute(
-                "DELETE FROM gpkg_contents WHERE table_name = ?",
-                (self.name,)
-            )
+            conn.execute("DELETE FROM gpkg_contents WHERE table_name = ?", (self.name,))
             # TODO: implement 'feature_count' column logic for gpkg_ogr_contents.
             conn.execute(
-                "DELETE FROM gpkg_ogr_contents WHERE table_name = ?",
-                (self.name,)
+                "DELETE FROM gpkg_ogr_contents WHERE table_name = ?", (self.name,)
             )
 
             conn.execute(
-                "DELETE FROM gpkg_geometry_columns WHERE table_name = ?",
-                (self.name,)
+                "DELETE FROM gpkg_geometry_columns WHERE table_name = ?", (self.name,)
             )
 
             conn.execute(f"DROP TABLE {self.name}")
@@ -125,25 +130,29 @@ class FeatureTable:
 
         """
         with self.gpkg.connect() as conn:
-            rtree_rows = conn.execute(f"""
+            rtree_rows = conn.execute(
+                f"""
                 SELECT id
                   FROM rtree_{self.name}_{self.geom_column}
                  WHERE maxX >= ?
                    AND minX <= ?
                    AND maxY >= ?
                    AND minY <= ?
-            """, (left, right, bottom, top))
+            """,
+                (left, right, bottom, top),
+            )
             ids = [r["id"] for r in rtree_rows]
 
         rows = []
         with self.gpkg.connect() as conn:
             for i in ids:
-                row = conn.execute(f"""
+                row = conn.execute(
+                    f"""
                     SELECT *
                       FROM {self.name}
                      WHERE {self.primary_key} = ?
                 """,
-                    (i,)
+                    (i,),
                 )
                 row = self.deserialize_row(next(row))
                 rows.append(row)
@@ -174,8 +183,12 @@ class FeatureTable:
         right = x + distance
         top = y + distance
 
-        left, bottom = self.transformer.transform(left, bottom, direction=pyproj.enums.TransformDirection.INVERSE)
-        right, top = self.transformer.transform(right, top, direction=pyproj.enums.TransformDirection.INVERSE)
+        left, bottom = self.transformer.transform(
+            left, bottom, direction=pyproj.enums.TransformDirection.INVERSE
+        )
+        right, top = self.transformer.transform(
+            right, top, direction=pyproj.enums.TransformDirection.INVERSE
+        )
 
         return self.intersects(left, bottom, right, top)
 
@@ -196,6 +209,8 @@ class FeatureTable:
         :rtype: generator of dicts
 
         """
+        # FIXME: check for existence of rtree and if it doesn't exist, raise
+        #        custom exception. Repeat for all methods that refer to rtree.
         rows = self.dwithin_rtree(lon, lat, distance)
         # Note that this sorting strategy is inefficient, sorting the entire result
         # and not using any distance-based tricks for optimal spitting-out of edges.
@@ -238,16 +253,20 @@ class FeatureTable:
 
         set_clauses = ", ".join([f"{k} = ?" for k in keys])
         with self.gpkg.connect() as conn:
-            conn.execute(f"""
+            conn.execute(
+                f"""
                 UPDATE {self.name}
                    SET {set_clauses}
                  WHERE {self.primary_key} = ?
-            """, (*values, primary_key))
+            """,
+                (*values, primary_key),
+            )
 
     def add_rtree(self):
         with self.gpkg.connect() as conn:
             rtree_table = f"rtree_{self.name}_{self.geom_column}"
-            conn.execute(f"""
+            conn.execute(
+                f"""
                 INSERT INTO gpkg_extensions
                             (
                                 table_name,
@@ -264,16 +283,21 @@ class FeatureTable:
                      WHERE NOT EXISTS(SELECT 1
                                         FROM gpkg_extensions
                                        WHERE extension_name = 'gpkg_rtree_index')
-            """, (self.name,))
+            """,
+                (self.name,),
+            )
 
-            conn.execute(f"""
+            conn.execute(
+                f"""
                 CREATE VIRTUAL TABLE IF NOT EXISTS {rtree_table} USING rtree(
                     id,
                     minX, maxX,
                     minY, maxY,
                 )
-            """)
-            conn.execute(f"""
+            """
+            )
+            conn.execute(
+                f"""
                 INSERT OR IGNORE INTO {rtree_table}
                      SELECT {self.primary_key} id,
                             MbrMinX({self.geom_column}) minX,
@@ -281,9 +305,11 @@ class FeatureTable:
                             MbrMinY({self.geom_column}) minY,
                             MbrMaxY({self.geom_column}) maxY
                        FROM {self.name}
-            """)
+            """
+            )
             # Add geometry column insert trigger
-            conn.execute(f"""
+            conn.execute(
+                f"""
                 CREATE TRIGGER {rtree_table}_insert
                AFTER INSERT ON {self.name}
                           WHEN (new.{self.geom_column} NOT NULL
@@ -297,9 +323,11 @@ class FeatureTable:
                     ST_MaxY(NEW.{self.geom_column})
                   );
                 END;
-            """)
+            """
+            )
             # Add geometry column (empty to non-empty) update trigger
-            conn.execute(f"""
+            conn.execute(
+                f"""
                 CREATE TRIGGER {rtree_table}_update1
                AFTER UPDATE OF {self.geom_column} ON {self.name}
                           WHEN OLD.{self.primary_key} = NEW.{self.primary_key}
@@ -316,9 +344,11 @@ class FeatureTable:
                     ST_MaxY(NEW.{self.geom_column})
                   );
                 END;
-            """)
+            """
+            )
             # Add geometry column (non-empty to empty) update trigger
-            conn.execute(f"""
+            conn.execute(
+                f"""
                 CREATE TRIGGER {rtree_table}_update2
                AFTER UPDATE OF {self.geom_column} ON {self.name}
                           WHEN OLD.{self.primary_key} = NEW.{self.primary_key}
@@ -329,9 +359,11 @@ class FeatureTable:
                 BEGIN
                   DELETE FROM {rtree_table} WHERE id = OLD.{self.primary_key};
                 END;
-            """)
+            """
+            )
             # Add various column with non-empty geometry update trigger
-            conn.execute(f"""
+            conn.execute(
+                f"""
                 CREATE TRIGGER {rtree_table}_update3 AFTER UPDATE ON {self.name}
                           WHEN OLD.{self.primary_key} != NEW.{self.primary_key}
                            AND (
@@ -348,9 +380,11 @@ class FeatureTable:
                     ST_MaxY(NEW.{self.geom_column})
                   );
                 END;
-            """)
+            """
+            )
             # Add various column with empty geometry update trigger
-            conn.execute(f"""
+            conn.execute(
+                f"""
                 CREATE TRIGGER {rtree_table}_update4 AFTER UPDATE ON {self.name}
                   WHEN OLD.{self.primary_key} != NEW.{self.primary_key}
                    AND (
@@ -361,21 +395,25 @@ class FeatureTable:
                   DELETE FROM {rtree_table}
                         WHERE id IN (OLD.{self.primary_key}, NEW.{self.primary_key});
                 END;
-            """)
+            """
+            )
             # Add row deletion update trigger
-            conn.execute(f"""
+            conn.execute(
+                f"""
                 CREATE TRIGGER {rtree_table}_delete AFTER DELETE ON {self.name}
                   WHEN old.{self.geom_column} NOT NULL
                 BEGIN
                   DELETE FROM {rtree_table} WHERE id = OLD.{self.primary_key};
                 END;
-            """)
+            """
+            )
 
     def add_srs(self):
         # Add initial spatial ref
         proj = pyproj.crs.CRS.from_authority("epsg", self.srid)
         with self.gpkg.connect() as conn:
-            conn.execute("""
+            conn.execute(
+                """
                 INSERT INTO gpkg_spatial_ref_sys
                             (
                                 srs_name,
@@ -388,14 +426,16 @@ class FeatureTable:
                       WHERE NOT EXISTS(
                           SELECT 1 FROM gpkg_spatial_ref_sys WHERE srs_id = ?
                       )
-            """, (
-                proj.name,
-                proj.to_epsg(),
-                proj.to_authority()[0],
-                proj.to_epsg(),
-                proj.to_wkt(),
-                proj.to_epsg(),
-            ))
+            """,
+                (
+                    proj.name,
+                    proj.to_epsg(),
+                    proj.to_authority()[0],
+                    proj.to_epsg(),
+                    proj.to_wkt(),
+                    proj.to_epsg(),
+                ),
+            )
 
     def drop_rtree(self):
         with self.gpkg.connect() as conn:
@@ -471,7 +511,7 @@ class FeatureTable:
         column_names = []
         with self.gpkg.connect() as conn:
             for table_info in conn.execute(f"PRAGMA table_info({self.name})"):
-                column_name = table_info['name']
+                column_name = table_info["name"]
                 if column_name == self.primary_key:
                     continue
                 column_names.append(column_name)
@@ -509,7 +549,7 @@ class FeatureTable:
 
     def _deserialize_geometry(self, geometry):
         # TODO: use geomet's built-in GPKG support?
-        wkb = geometry[len(self._gp_header):]
+        wkb = geometry[len(self._gp_header) :]
         return geomet.wkb.loads(wkb)
 
     def serialize_row(self, row):
@@ -520,7 +560,10 @@ class FeatureTable:
 
     def deserialize_row(self, row):
         # TODO: Implement this as a row handler for sqlite3 interface?
-        return {**row, self.geom_column: self._deserialize_geometry(row[self.geom_column])}
+        return {
+            **row,
+            self.geom_column: self._deserialize_geometry(row[self.geom_column]),
+        }
 
     @property
     def _sql_upsert_template(self):
@@ -569,18 +612,18 @@ class GeoPackage:
             table_name = row["table_name"]
 
             with self.connect() as conn:
-                geom_type_query = conn.execute("""
+                geom_type_query = conn.execute(
+                    """
                     SELECT geometry_type_name
                       FROM gpkg_geometry_columns
                      WHERE table_name = ?
-                """, (table_name,))
+                """,
+                    (table_name,),
+                )
                 geom_type = next(geom_type_query)["geometry_type_name"]
 
             self.feature_tables[table_name] = FeatureTable(
-                self,
-                table_name,
-                geom_type,
-                srid=row["srs_id"]
+                self, table_name, geom_type, srid=row["srs_id"]
             )
 
     def add_feature_table(self, name, geom_type, srid=4326):
@@ -627,7 +670,7 @@ class GeoPackage:
 
     def _is_empty_database(self):
         with self.connect() as conn:
-            query = conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'");
+            query = conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
             try:
                 next(query)
                 return False
@@ -641,7 +684,8 @@ class GeoPackage:
             conn.execute(f"PRAGMA user_version = {GPKG_USER_VERSION}")
 
             # Create gpkg_contents table
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS gpkg_contents (
                     table_name TEXT,
                     data_type TEXT NOT NULL,
@@ -655,10 +699,12 @@ class GeoPackage:
                     srs_id INTEGER,
                     PRIMARY KEY (table_name)
                 )
-            """)
+            """
+            )
 
             # Create gpkg_extensions table
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS gpkg_extensions(
                     table_name TEXT,
                     column_name TEXT,
@@ -667,10 +713,12 @@ class GeoPackage:
                     scope TEXT NOT NULL,
                     UNIQUE (table_name, column_name, extension_name)
                 )
-            """)
+            """
+            )
 
             # Create gpkg_geometry_columns table
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS gpkg_geometry_columns(
                     table_name TEXT UNIQUE NOT NULL,
                     column_name TEXT NOT NULL,
@@ -680,19 +728,23 @@ class GeoPackage:
                     m TINYINT NOT NULL,
                     PRIMARY KEY (table_name, column_name)
                 )
-            """)
+            """
+            )
 
             # Create gpkg_ogr_contents table
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS gpkg_ogr_contents(
                     table_name TEXT NOT NULL,
                     feature_count INTEGER DEFAULT NULL,
                     PRIMARY KEY (table_name)
                 )
-            """)
+            """
+            )
 
             # Create gpkg_spatial_ref_sys
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS gpkg_spatial_ref_sys(
                     srs_name TEXT NOT NULL,
                     srs_id INTEGER NOT NULL,
@@ -702,7 +754,8 @@ class GeoPackage:
                     description TEXT,
                     PRIMARY KEY (srs_id)
                 )
-            """)
+            """
+            )
 
     def copy(self, path):
         """Copies the current GeoPackage to a new location and returns a new instance
