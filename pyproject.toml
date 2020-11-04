@@ -23,8 +23,10 @@ pytest = "^5.2"
 black = "^19.10b0"
 pre-commit = "^1.20.0"
 dephell = "^0.8.3"
+pytest-cov = "^2.10.1"
 
 [tool.black]
+line-length = 80
 exclude = """
 (
   setup.py
