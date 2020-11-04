@@ -46,8 +46,8 @@ class FeatureTable:
         """Initialize the feature_table's tables, as they do not yet exist."""
         # TODO: implement enum for geom_type?
         # TODO: implement 'last change' column logic for gpkg_contents.
-        # FIXME: Catch cases where these tables don't exist, raise useful exception.
-        #        Should indicate a bad GeoPackage.
+        # FIXME: Catch cases where these tables don't exist, raise useful
+        #        exception. Should indicate a bad GeoPackage.
         # TODO: catch case where feature_table has already been added
         with self.gpkg.connect() as conn:
             conn.execute(
@@ -69,7 +69,8 @@ class FeatureTable:
                 (self.name, self.name, self.srid),
             )
 
-            # TODO: implement 'feature_count' column logic for gpkg_ogr_contents.
+            # TODO: implement 'feature_count' column logic for
+            #       gpkg_ogr_contents.
             conn.execute(
                 "INSERT INTO gpkg_ogr_contents ( table_name ) VALUES ( ? )",
                 (self.name,),
@@ -102,14 +103,19 @@ class FeatureTable:
 
     def drop_tables(self):
         with self.gpkg.connect() as conn:
-            conn.execute("DELETE FROM gpkg_contents WHERE table_name = ?", (self.name,))
-            # TODO: implement 'feature_count' column logic for gpkg_ogr_contents.
             conn.execute(
-                "DELETE FROM gpkg_ogr_contents WHERE table_name = ?", (self.name,)
+                "DELETE FROM gpkg_contents WHERE table_name = ?", (self.name,)
+            )
+            # TODO: implement 'feature_count' column logic for
+            #       gpkg_ogr_contents.
+            conn.execute(
+                "DELETE FROM gpkg_ogr_contents WHERE table_name = ?",
+                (self.name,),
             )
 
             conn.execute(
-                "DELETE FROM gpkg_geometry_columns WHERE table_name = ?", (self.name,)
+                "DELETE FROM gpkg_geometry_columns WHERE table_name = ?",
+                (self.name,),
             )
 
             conn.execute(f"DROP TABLE {self.name}")
@@ -160,8 +166,8 @@ class FeatureTable:
 
     def dwithin_rtree(self, lon, lat, distance):
         """Finds features within some distance of a point using a bounding box.
-        Includes all entries within the bounding box, not just those within the exact
-        distance.
+        Includes all entries within the bounding box, not just those within the
+        exact distance.
 
         :param lon: The longitude of the query point.
         :type lon: float
@@ -173,9 +179,9 @@ class FeatureTable:
         :rtype: generator of dicts
 
         """
-        # NOTE: Because these transformations are each in one dimension, reprojection
-        # is note necessary. Can just translate from lon to meters, lat to meters
-        # separately.
+        # NOTE: Because these transformations are each in one dimension,
+        #       reprojection is not necessary. Can just translate from lon to
+        #       meters, lat to meters separately.
         x, y = self.transformer.transform(lon, lat)
 
         left = x - distance
@@ -194,8 +200,6 @@ class FeatureTable:
 
     def dwithin(self, lon, lat, distance, sort=False):
         """Finds features within some distance of a point using a bounding box.
-        Includes all entries within the bounding box, not just those within the exact
-        distance.
 
         :param lon: The longitude of the query point.
         :type lon: float
@@ -212,9 +216,11 @@ class FeatureTable:
         # FIXME: check for existence of rtree and if it doesn't exist, raise
         #        custom exception. Repeat for all methods that refer to rtree.
         rows = self.dwithin_rtree(lon, lat, distance)
-        # Note that this sorting strategy is inefficient, sorting the entire result
-        # and not using any distance-based tricks for optimal spitting-out of edges.
-        # TODO: Implement rtree-inspired real distance sort method using minheap
+        # Note that this sorting strategy is inefficient, sorting the entire
+        # result and not using any distance-based tricks for optimal
+        # spitting-out of edges.
+        # TODO: Implement rtree-inspired real distance sort method using
+        #       minheap
         distance_rows = []
 
         for r in rows:
@@ -240,7 +246,9 @@ class FeatureTable:
         if new_columns:
             cols_to_add = []
             for colname in new_columns:
-                cols_to_add.append((colname, self._column_type(ddict[colname])))
+                cols_to_add.append(
+                    (colname, self._column_type(ddict[colname]))
+                )
             self._add_feature_table_columns(cols_to_add)
             columns = self._get_column_names()
 
@@ -280,9 +288,11 @@ class FeatureTable:
                             'gpkg_rtree_index',
                             'http://www.geopackage.org/spec120/#extension_rtree',
                             'write-only'
-                     WHERE NOT EXISTS(SELECT 1
-                                        FROM gpkg_extensions
-                                       WHERE extension_name = 'gpkg_rtree_index')
+                     WHERE NOT EXISTS(
+                        SELECT 1
+                          FROM gpkg_extensions
+                         WHERE extension_name = 'gpkg_rtree_index'
+                     )
             """,
                 (self.name,),
             )
@@ -441,16 +451,34 @@ class FeatureTable:
         with self.gpkg.connect() as conn:
             # Drop rtree tables
             conn.execute(f"DROP TABLE rtree_{self.name}_{self.geom_column}")
-            conn.execute(f"DROP TABLE rtree_{self.name}_{self.geom_column}_node")
-            conn.execute(f"DROP TABLE rtree_{self.name}_{self.geom_column}_rowid")
-            conn.execute(f"DROP TABLE rtree_{self.name}_{self.geom_column}_parent")
+            conn.execute(
+                f"DROP TABLE rtree_{self.name}_{self.geom_column}_node"
+            )
+            conn.execute(
+                f"DROP TABLE rtree_{self.name}_{self.geom_column}_rowid"
+            )
+            conn.execute(
+                f"DROP TABLE rtree_{self.name}_{self.geom_column}_parent"
+            )
             # Drop rtree indices
-            conn.execut(f"DROP INDEX rtree_{self.name}_{self.geom_columns}_insert")
-            conn.execut(f"DROP INDEX rtree_{self.name}_{self.geom_columns}_update1")
-            conn.execut(f"DROP INDEX rtree_{self.name}_{self.geom_columns}_update2")
-            conn.execut(f"DROP INDEX rtree_{self.name}_{self.geom_columns}_update3")
-            conn.execut(f"DROP INDEX rtree_{self.name}_{self.geom_columns}_update4")
-            conn.execut(f"DROP INDEX rtree_{self.name}_{self.geom_columns}_delete")
+            conn.execut(
+                f"DROP INDEX rtree_{self.name}_{self.geom_columns}_insert"
+            )
+            conn.execut(
+                f"DROP INDEX rtree_{self.name}_{self.geom_columns}_update1"
+            )
+            conn.execut(
+                f"DROP INDEX rtree_{self.name}_{self.geom_columns}_update2"
+            )
+            conn.execut(
+                f"DROP INDEX rtree_{self.name}_{self.geom_columns}_update3"
+            )
+            conn.execut(
+                f"DROP INDEX rtree_{self.name}_{self.geom_columns}_update4"
+            )
+            conn.execut(
+                f"DROP INDEX rtree_{self.name}_{self.geom_columns}_delete"
+            )
 
     def write_features(self, features, batch_size=10_000, counter=None):
         queue = []
@@ -459,8 +487,9 @@ class FeatureTable:
             with self.gpkg.connect() as conn:
                 template = self._sql_upsert_template
                 n = len(queue)
-                # TODO: look into performance of this strategy. Another option is to insert
-                # multiple values at once in a single statement.
+                # TODO: look into performance of this strategy. Another option
+                #       is to insert multiple values at once in a single
+                #       statement.
                 conn.executemany(template, queue)
             if counter is not None:
                 counter.update(n)
@@ -505,7 +534,9 @@ class FeatureTable:
     def _add_feature_table_columns(self, columns):
         with self.gpkg.connect() as conn:
             for column, value in columns:
-                conn.execute(f"ALTER TABLE {self.name} ADD COLUMN '{column}' {value}")
+                conn.execute(
+                    f"ALTER TABLE {self.name} ADD COLUMN '{column}' {value}"
+                )
 
     def _get_column_names(self):
         column_names = []
@@ -549,20 +580,25 @@ class FeatureTable:
 
     def _deserialize_geometry(self, geometry):
         # TODO: use geomet's built-in GPKG support?
-        wkb = geometry[len(self._gp_header) :]
+        header_len = len(self._gp_header)
+        wkb = geometry[header_len:]
         return geomet.wkb.loads(wkb)
 
     def serialize_row(self, row):
         row = {**row}
         if self.geom_column in row:
-            row[self.geom_column] = self._serialize_geometry(row[self.geom_column])
+            row[self.geom_column] = self._serialize_geometry(
+                row[self.geom_column]
+            )
         return row
 
     def deserialize_row(self, row):
         # TODO: Implement this as a row handler for sqlite3 interface?
         return {
             **row,
-            self.geom_column: self._deserialize_geometry(row[self.geom_column]),
+            self.geom_column: self._deserialize_geometry(
+                row[self.geom_column]
+            ),
         }
 
     @property
@@ -605,7 +641,9 @@ class GeoPackage:
 
         # Instantiate FeatureTables that already exist in the db
         with self.connect() as conn:
-            table_rows = conn.execute("SELECT table_name, srs_id FROM gpkg_contents")
+            table_rows = conn.execute(
+                "SELECT table_name, srs_id FROM gpkg_contents"
+            )
             table_rows = list(table_rows)
 
         for row in table_rows:
@@ -639,26 +677,27 @@ class GeoPackage:
     def _get_connection(self):
         conn = sqlite3.connect(self.path, uri=True)
         conn.enable_load_extension(True)
-        # Spatialite used for rtree-based functions (MinX, etc). Can eventually replace
-        # or make configurable with other extensions.
+        # Spatialite used for rtree-based functions (MinX, etc). Can eventually
+        # replace or make configurable with other extensions.
         conn.load_extension("mod_spatialite.so")
         conn.row_factory = self._dict_factory
         self.conn = conn
 
     @contextlib.contextmanager
     def connect(self):
-        # FIXME: monitor connection and ensure that it is good. Handle in-memory case.
+        # FIXME: monitor connection and ensure that it is good. Handle
+        #        in-memory case.
         yield self.conn
         self.conn.commit()
-        # FIXME: downsides of not calling conn.close? It's necessary to note call
-        # conn.close for in-memory databases. May want to change this behavior
-        # depending on whether the db is on-disk or in-memory.
-        # conn.close()
+        # FIXME: downsides of not calling conn.close? It's necessary to note
+        #        call conn.close for in-memory databases. May want to change
+        #        this behavior depending on whether the db is on-disk or
+        #        in-memory.
 
     def _setup_database(self):
         if self.path is None:
-            # TODO: revisit this behavior. Creating a temporary file by default may
-            # be undesirable.
+            # TODO: revisit this behavior. Creating a temporary file by default
+            #       may be undesirable.
             # Create a temporary path, get the name
             _, path = tempfile.mkstemp(suffix=".gpkg")
             self.path = str(path)
@@ -670,7 +709,9 @@ class GeoPackage:
 
     def _is_empty_database(self):
         with self.connect() as conn:
-            query = conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+            query = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            )
             try:
                 next(query)
                 return False
@@ -759,22 +800,23 @@ class GeoPackage:
 
     def copy(self, path):
         """Copies the current GeoPackage to a new location and returns a new instance
-        of a GeoPackage. A convenient way to create an in-memory GeoPackage, as path
-        can be any SQLite-compatible connection string, including :memory:.
+        of a GeoPackage. A convenient way to create an in-memory GeoPackage, as
+        path can be any SQLite-compatible connection string, including
+        :memory:.
 
-        :param path: Path to the new database. Any SQLite connection string can be
-                     used.
+        :param path: Path to the new database. Any SQLite connection string can
+                     be used.
         :type path: str
 
         """
-        # TODO: catch the "memory" string and ensure that it includes a name and
-        # shared cache. Our strategy requires reconnecting to the db, so it must
-        # persist in memory.
+        # TODO: catch the "memory" string and ensure that it includes a name
+        #       and shared cache. Our strategy requires reconnecting to the db,
+        #       so it must persist in memory.
 
         new_conn = sqlite3.connect(path)
         new_conn.enable_load_extension(True)
-        # Spatialite used for rtree-based functions (MinX, etc). Can eventually replace
-        # or make configurable with other extensions.
+        # Spatialite used for rtree-based functions (MinX, etc). Can eventually
+        # replace or make configurable with other extensions.
         new_conn.load_extension("mod_spatialite.so")
 
         with self.connect() as conn:
@@ -783,7 +825,8 @@ class GeoPackage:
 
             # Copy over all tables but not indices
             for line in conn.iterdump():
-                # Skip all index creation - these should be recreated afterwards
+                # Skip all index creation - these should be recreated
+                # afterwards
                 if "CREATE TABLE" in line or "INSERT INTO" in line:
                     # TODO: derive index names from metadata table instead
                     if "idx_" in line:

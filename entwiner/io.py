@@ -1,10 +1,10 @@
-"""Wraps various readers/writers for different geospatial formats with a focus on
-low-memory reading."""
+"""Wraps various readers/writers for different geospatial formats with a focus
+on low-memory reading."""
 import os
 
 import fiona
 
-from .exceptions import UnknownGeometry, UnrecognizedFileFormat
+from .exceptions import UnrecognizedFileFormat
 
 
 def edge_generator(path, precision, changes_sign=None, add_reverse=False):
@@ -22,7 +22,10 @@ def edge_generator(path, precision, changes_sign=None, add_reverse=False):
             [str(round(c, precision)) for c in f["geometry"]["coordinates"][0]]
         )
         v = ", ".join(
-            [str(round(c, precision)) for c in f["geometry"]["coordinates"][-1]]
+            [
+                str(round(c, precision))
+                for c in f["geometry"]["coordinates"][-1]
+            ]
         )
 
         return u, v, props
@@ -46,7 +49,9 @@ def edge_generator(path, precision, changes_sign=None, add_reverse=False):
                             props[change_sign] = -1 * props[change_sign]
                     yield v, u, props
     except fiona.errors.DriverError:
-        raise UnrecognizedFileFormat("{} has an unrecognized format.".format(path))
+        raise UnrecognizedFileFormat(
+            "{} has an unrecognized format.".format(path)
+        )
 
 
 def reverse_linestring(coords):

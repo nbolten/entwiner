@@ -36,7 +36,9 @@ class InnerAdjlistView(Mapping):
 
     def items(self):
         # This method is overridden to avoid two round trips to the database.
-        return ((v, self.edge_factory(**row)) for v, row in self.iterator(self.n))
+        return (
+            (v, self.edge_factory(**row)) for v, row in self.iterator(self.n)
+        )
 
 
 class InnerSuccessorsView(InnerAdjlistView):

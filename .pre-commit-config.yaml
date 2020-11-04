@@ -21,3 +21,10 @@ repos:
       entry: "poetry export --dev -f requirements.txt > requirements-dev.txt"
       language: system
       files: "./requirements-dev.txt"
+    - id: pytest
+      name: pytest
+      language: system
+      entry: pytest
+      pass_filenames: false
+      always_run: true
+      stages: [commit, push]

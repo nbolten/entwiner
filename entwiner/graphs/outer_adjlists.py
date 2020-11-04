@@ -1,5 +1,5 @@
-"""Outer adjacency lists. Must be compatible with holding either predecessors or
-successors."""
+"""Outer adjacency lists. Must be compatible with holding either predecessors
+or successors."""
 from collections.abc import Mapping, MutableMapping
 
 from .inner_adjlists import InnerPredecessorsView, InnerSuccessorsView
@@ -41,8 +41,8 @@ class OuterAdjlistView(Mapping):
         )
 
     def __contains__(self, key):
-        # This method is overridden because __getitem__ doesn't  initially check for
-        # a key's presence.
+        # This method is overridden because __getitem__ doesn't  initially
+        # check for a key's presence.
         # FIXME: should __getitem__ initially check for a key's presence?
         return self.network.has_node(key)
 
@@ -66,7 +66,9 @@ class OuterSuccessors(OuterSuccessorsView, MutableMapping):
     inner_adjlist_factory = InnerSuccessors
 
     def __setitem__(self, key, ddict):
-        self.network.replace_successors(key, ((k, v) for k, v in ddict.items()))
+        self.network.replace_successors(
+            key, ((k, v) for k, v in ddict.items())
+        )
 
     def __delitem__(self, key):
         self.network.delete_successors(key)
@@ -76,7 +78,9 @@ class OuterPredecessors(OuterPredecessorsView, MutableMapping):
     inner_adjlist_factory = InnerPredecessors
 
     def __setitem__(self, key, ddict):
-        self.network.replace_predecessors(key, ((k, v) for k, v in ddict.items()))
+        self.network.replace_predecessors(
+            key, ((k, v) for k, v in ddict.items())
+        )
 
     def __delitem__(self, key):
         self.network.delete_predecessors(key)

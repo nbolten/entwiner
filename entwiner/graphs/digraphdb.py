@@ -6,26 +6,26 @@ import uuid
 import networkx as nx
 
 from ..geopackagenetwork import GeoPackageNetwork
-from ..exceptions import ImmutableGraphError, UnderspecifiedGraphError
+from ..exceptions import UnderspecifiedGraphError
 from .edges import Edge, EdgeView
 from .nodes import Nodes, NodesView
-from .outer_adjlists import OuterPredecessors, OuterSuccessors
+from .outer_adjlists import OuterSuccessors
 from .outer_adjlists import OuterPredecessorsView, OuterSuccessorsView
-from .inner_adjlists import InnerPredecessors, InnerSuccessors
-from .inner_adjlists import InnerPredecessorsView, InnerSuccessorsView
 
 
 class DiGraphDBView(nx.DiGraph):
     node_dict_factory = NodesView
     adjlist_outer_dict_factory = OuterSuccessorsView
     # In networkx, inner adjlist is only ever invoked without parameters in
-    # order to assign new nodes or edges with no attr. Therefore, its functionality
-    # can be accounted for elsewhere: via __getitem__ and __setitem__ on the
-    # outer adjacency list.
+    # order to assign new nodes or edges with no attr. Therefore, its
+    # functionality can be accounted for elsewhere: via __getitem__ and
+    # __setitem__ on the outer adjacency list.
     adjlist_inner_dict_factory = dict
     edge_attr_dict_factory = EdgeView
 
-    def __init__(self, incoming_graph_data=None, path=None, network=None, **attr):
+    def __init__(
+        self, incoming_graph_data=None, path=None, network=None, **attr
+    ):
         # Path attr overrides sqlite attr
         if path:
             network = GeoPackageNetwork(path)
@@ -33,7 +33,9 @@ class DiGraphDBView(nx.DiGraph):
         self.network = network
 
         # The factories of nx dict-likes need to be informed of the connection
-        self.node_dict_factory = partial(self.node_dict_factory, _network=self.network)
+        self.node_dict_factory = partial(
+            self.node_dict_factory, _network=self.network
+        )
         self.adjlist_outer_dict_factory = partial(
             self.adjlist_outer_dict_factory, _network=self.network
         )
@@ -49,7 +51,9 @@ class DiGraphDBView(nx.DiGraph):
         self._pred = OuterPredecessorsView(_network=self.network)
 
         if incoming_graph_data is not None:
-            nx.convert.to_networkx_graph(incoming_graph_data, create_using=self)
+            nx.convert.to_networkx_graph(
+                incoming_graph_data, create_using=self
+            )
         self.graph.update(attr)
 
         # Set custom flag for read-only graph DBs
@@ -100,13 +104,14 @@ class DiGraphDB(DiGraphDBView):
 
     node_dict_factory = Nodes
     adjlist_outer_dict_factory = OuterSuccessors
-    # TODO: consider creating a read-only Mapping in the case of immutable graphs.
+    # TODO: consider creating a read-only Mapping in the case of immutable
+    #       graphs.
     adjlist_inner_dict_factory = dict
     edge_attr_dict_factory = Edge
 
     def __init__(self, *args, path=None, network=None, **kwargs):
-        # TODO: Consider adding database file existence checker rather than always
-        # checking on initialization?
+        # TODO: Consider adding database file existence checker rather than
+        #       always checking on initialization?
         if network is None:
             # FIXME: should path be allowed to be None?
             if path is None:
@@ -114,7 +119,8 @@ class DiGraphDB(DiGraphDBView):
             else:
                 if not os.path.exists(path):
                     raise UnderspecifiedGraphError(
-                        "DB file does not exist. Consider using DiGraphDB.create_graph"
+                        "DB file does not exist. Consider using "
+                        "DiGraphDB.create_graph"
                     )
 
                 network = GeoPackageNetwork(path)
@@ -139,17 +145,20 @@ class DiGraphDB(DiGraphDBView):
 
         """
         if _batch_size < 2:
-            # User has entered invalid number (negative, zero) or 1. Use default behavior.
-            super().add_edges_from(self, ebunch_to_add, **attr)
+            # User has entered invalid number (negative, zero) or 1. Use
+            # default behavior.
+            super().add_edges_from(self, ebunch, **attr)
             return
 
         # TODO: length check on each edge
-        features = ({"_u": edge[0], "_v": edge[1], **edge[2]} for edge in ebunch)
+        features = (
+            {"_u": edge[0], "_v": edge[1], **edge[2]} for edge in ebunch
+        )
         self.network.edges.write_features(
             features, batch_size=_batch_size, counter=counter
         )
 
     def update_edges(self, ebunch):
-        # FIXME: this doesn't actually work. Implement update / upsert logic for
-        # GeoPackage feature tables, then use that.
+        # FIXME: this doesn't actually work. Implement update / upsert logic
+        #        for GeoPackage feature tables, then use that.
         return self.network.edges.update(ebunch)

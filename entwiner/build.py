@@ -7,7 +7,9 @@ from entwiner.constants import EDGE_BATCH_SIZE
 
 
 class GraphBuilder:
-    def __init__(self, graph_class=entwiner.DiGraphDB, precision=7, changes_sign=None):
+    def __init__(
+        self, graph_class=entwiner.DiGraphDB, precision=7, changes_sign=None
+    ):
         if changes_sign is None:
             changes_sign = []
 
@@ -30,8 +32,8 @@ class GraphBuilder:
         self.G = G
 
     def finalize_db(self, path):
-        # FIXME: implement proper interface / paradigm for overwriting geopackages
-        #        Consider creating path.gpkg.build temporary file
+        # FIXME: implement proper interface / paradigm for overwriting
+        #        GeoPackages. Consider creating path.gpkg.build temporary file
 
         # TODO: place the rtree step somewhere else?
         self.G.network.edges.add_rtree()
@@ -54,4 +56,6 @@ class GraphBuilder:
             changes_sign=self.changes_sign,
             add_reverse=True,
         )
-        self.G.add_edges_from(edge_gen, _batch_size=batch_size, counter=counter)
+        self.G.add_edges_from(
+            edge_gen, _batch_size=batch_size, counter=counter
+        )

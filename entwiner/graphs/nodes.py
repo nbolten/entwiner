@@ -5,8 +5,8 @@ from ..exceptions import NodeNotFound
 
 
 class NodesView(Mapping):
-    """An immutable mapping from node IDs to nodes. Used by NetworkX classes to iterate
-    over nodes.
+    """An immutable mapping from node IDs to nodes. Used by NetworkX classes to
+    iterate over nodes.
 
     :param _network: Underlying graph container with the same signature as
                      entwiner.GeoPackageNetwork.
@@ -32,8 +32,8 @@ class NodesView(Mapping):
 
 
 class Nodes(MutableMapping):
-    """A mapping from node IDs to nodes. Used by NetworkX classes to iterate over and
-    insert nodes.
+    """A mapping from node IDs to nodes. Used by NetworkX classes to iterate
+    over and insert nodes.
 
     :param _network: Underlying graph container with the same signature as
                      entwiner.GeoPackageNetwork.
@@ -90,7 +90,8 @@ class NodeView(Mapping):
             except NodeNotFound:
                 raise KeyError(f"Node {_n} not found")
 
-    # TODO: consider that .items() requires two round trips - may want to override
+    # TODO: consider that .items() requires two round trips - may want to
+    #       override
     def __getitem__(self, key):
         try:
             return self.network.nodes.get_node(self.n)[key]
@@ -106,7 +107,8 @@ class NodeView(Mapping):
 
 # TODO: use Mapping (mutable?) abstract base class for dict-like magic
 class Node(MutableMapping):
-    """Retrieves mutable node attributes from table, but does not allow assignment.
+    """Retrieves mutable node attributes from table, but does not allow
+    assignment.
 
     :param n: Node ID.
     :type n: str

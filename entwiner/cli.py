@@ -1,11 +1,8 @@
 """Entwiner CLI."""
-import os
-
 import click
 import fiona
 
 from entwiner import GraphBuilder
-import entwiner
 
 
 @click.command()
@@ -14,11 +11,13 @@ import entwiner
 @click.option("--precision", default=7)
 @click.option("--changes-sign", multiple=True)
 def entwiner(infiles, outfile, precision, changes_sign):
-    #
-    # Initialize temporary database. If build fails, original remains untouched.
-    # TODO: make this behavior user-configurable: graph DBs might become very large,
-    # warranting a delete-first approach?
-    #
+    """Initialize temporary database. If build fails, original remains
+    untouched.
+
+    """
+    # TODO: make this behavior user-configurable: graph DBs might become very
+    # large, warranting a delete-first approach?
+
     click.echo("Creating new graph database... ", nl=False)
     builder = GraphBuilder(precision=precision, changes_sign=changes_sign)
     builder.create_temporary_db()

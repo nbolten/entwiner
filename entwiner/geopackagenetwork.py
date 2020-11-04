@@ -1,21 +1,14 @@
 from collections import OrderedDict
-import os
 import sqlite3
-import tempfile
-
-import fiona
-import geomet.wkb
-from shapely.geometry import shape, LineString, Point
 
 from .geopackage import GeoPackage, FeatureTable
-from .utils import haversine
 from .exceptions import NodeNotFound
 
 
 class EdgeTable(FeatureTable):
     def write_features(self, features, batch_size=10_000, counter=None):
-        # FIXME: should fill a nodes queue instead of realizing a full list at this
-        # step
+        # FIXME: should fill a nodes queue instead of realizing a full list at
+        # this step
         ways_queue = []
         nodes_queue = []
 
@@ -31,11 +24,11 @@ class EdgeTable(FeatureTable):
             if self.geom_column in feature:
                 u_feature[self.geom_column] = {
                     "type": "Point",
-                    "coordinates": feature["geom"]["coordinates"][0]
+                    "coordinates": feature["geom"]["coordinates"][0],
                 }
                 v_feature[self.geom_column] = {
                     "type": "Point",
-                    "coordinates": feature["geom"]["coordinates"][-1]
+                    "coordinates": feature["geom"]["coordinates"][-1],
                 }
             nodes_queue.append(u_feature)
             nodes_queue.append(v_feature)
@@ -53,11 +46,11 @@ class EdgeTable(FeatureTable):
             with self.gpkg.connect() as conn:
                 fids = conn.execute(
                     f"SELECT fid FROM {self.name} WHERE _u = ? AND _v = ?",
-                    (u, v)
+                    (u, v),
                 )
                 fid = next(fids)["fid"]
-            # TODO: calling serialization function on every __setitem__ seems unnecessary
-            # if it's not the geom column.
+            # TODO: calling serialization function on every __setitem__ seems
+            #       unnecessary if it's not the geom column.
             ddict = self.serialize_row(next(self._table_format(((u, v, d),))))
             super().update(fid, ddict)
 
@@ -66,7 +59,9 @@ class EdgeTable(FeatureTable):
             if n is None:
                 rows = conn.execute(f"SELECT DISTINCT _v FROM {self.name}")
             else:
-                rows = conn.execute(f"SELECT _v FROM {self.name} WHERE _u = ?", (n,))
+                rows = conn.execute(
+                    f"SELECT _v FROM {self.name} WHERE _u = ?", (n,)
+                )
             # TODO: performance increase by temporary changing row handler?
             ns = [r["_v"] for r in rows]
         return ns
@@ -76,14 +71,18 @@ class EdgeTable(FeatureTable):
             if n is None:
                 rows = conn.execute(f"SELECT DISTINCT _u FROM {self.name}")
             else:
-                rows = conn.execute(f"SELECT _u FROM {self.name} WHERE _v = ?", (n,))
+                rows = conn.execute(
+                    f"SELECT _u FROM {self.name} WHERE _v = ?", (n,)
+                )
             # TODO: performance increase by temporary changing row handler?
             ns = [r["_u"] for r in rows]
         return ns
 
     def successors(self, n):
         with self.gpkg.connect() as conn:
-            rows = conn.execute(f"SELECT * FROM {self.name} WHERE _u = ?", (n,))
+            rows = conn.execute(
+                f"SELECT * FROM {self.name} WHERE _u = ?", (n,)
+            )
             # TODO: performance increase by temporary changing row handler?
             ns = []
             for r in rows:
@@ -93,7 +92,9 @@ class EdgeTable(FeatureTable):
 
     def predecessors(self, n):
         with self.gpkg.connect() as conn:
-            rows = conn.execute(f"SELECT * FROM {self.name} WHERE _v = ?", (n,))
+            rows = conn.execute(
+                f"SELECT * FROM {self.name} WHERE _v = ?", (n,)
+            )
             # TODO: performance increase by temporary changing row handler?
             ns = [(r.pop("_u"), r) for r in rows]
         return ns
@@ -101,30 +102,43 @@ class EdgeTable(FeatureTable):
     def unique_predecessors(self, n=None):
         with self.gpkg.connect() as conn:
             if n is None:
-                rows = conn.execute(f"SELECT COUNT(DISTINCT(_u)) c FROM {self.name}")
+                rows = conn.execute(
+                    f"SELECT COUNT(DISTINCT(_u)) c FROM {self.name}"
+                )
             else:
-                rows = conn.execute(f"""
+                rows = conn.execute(
+                    f"""
                     SELECT COUNT(DISTINCT(_u)) c FROM {self.name} WHERE _v = ?
-                """, (n,))
+                """,
+                    (n,),
+                )
             count = next(rows)["c"]
         return count
 
     def unique_successors(self, n=None):
         with self.gpkg.connect() as conn:
             if n is None:
-                rows = conn.execute(f"SELECT COUNT(DISTINCT(_v)) c FROM {self.name}")
+                rows = conn.execute(
+                    f"SELECT COUNT(DISTINCT(_v)) c FROM {self.name}"
+                )
             else:
-                rows = conn.execute(f"""
+                rows = conn.execute(
+                    f"""
                     SELECT COUNT(DISTINCT(_u)) c FROM {self.name} WHERE _u = ?
-                """, (n,))
+                """,
+                    (n,),
+                )
             count = next(rows)["c"]
         return count
 
     def get_edge(self, u, v):
         with self.gpkg.connect() as conn:
-            rows = conn.execute(f"""
+            rows = conn.execute(
+                f"""
                 SELECT * FROM {self.name} WHERE _u = ? AND _v = ?
-            """, (u, v))
+            """,
+                (u, v),
+            )
             # TODO: performance increase by temporary changing row handler?
             return self.deserialize_row(next(rows))
 
@@ -154,9 +168,12 @@ class NodeTable(FeatureTable):
 
     def get_node(self, n):
         with self.gpkg.connect() as conn:
-            rows = conn.execute(f"""
+            rows = conn.execute(
+                f"""
                 SELECT * FROM {self.name} WHERE _n = ?
-            """, (n,))
+            """,
+                (n,),
+            )
             # TODO: performance increase by temporary changing row handler?
             try:
                 return self.deserialize_row(next(rows))
@@ -185,8 +202,8 @@ class GeoPackageNetwork:
         # TODO: handle reprojection during addition of features
         self.srid = srid
 
-        # TODO: handle recognition of existing geopackage (with expected tables) vs.
-        # initializing one from scratch.
+        # TODO: handle recognition of existing geopackage (with expected
+        #       tables) vs. initializing one from scratch.
         self._create_graph_tables()
         self.edges = EdgeTable(self.gpkg, "edges", "LINESTRING", srid=srid)
         self.nodes = NodeTable(self.gpkg, "nodes", "POINT", srid=srid)
@@ -194,27 +211,32 @@ class GeoPackageNetwork:
         self.gpkg.feature_tables["nodes"] = self.nodes
 
     def copy(self, path):
-        new_gpkg = self.gpkg.copy(path)
+        self.gpkg.copy(path)
         return GeoPackageNetwork(path, srid=self.srid)
 
     def _create_graph_tables(self):
-        # TODO: consider creating metadata table to support multiple feature_tables, create
-        # edges view? Benchmark performance. Should be ~2X slowdown, but is more
-        # flexible and smaller change, easier to add/remove from a GeoPackage.
+        # TODO: consider creating metadata table to support multiple
+        #       feature_tables, create edges view? Benchmark performance.
+        #       Should be ~2X slowdown, but is more flexible and smaller
+        #       change, easier to add/remove from a GeoPackage.
         try:
             with self.gpkg.connect() as conn:
-                edges_table_query = conn.execute("""
+                edges_table_query = conn.execute(
+                    """
                     SELECT table_name FROM gpkg_contents WHERE table_name = 'edges'
-                """)
+                """
+                )
                 next(edges_table_query)
         except StopIteration:
             self.gpkg.add_feature_table("edges", "LINESTRING", self.srid)
 
         try:
             with self.gpkg.connect() as conn:
-                nodes_table_query = conn.execute("""
+                nodes_table_query = conn.execute(
+                    """
                     SELECT table_name FROM gpkg_contents WHERE table_name = 'nodes'
-                """)
+                """
+                )
                 next(nodes_table_query)
         except StopIteration:
             self.gpkg.add_feature_table("nodes", "POINT", self.srid)
@@ -229,27 +251,35 @@ class GeoPackageNetwork:
                 pass
         with self.gpkg.connect() as conn:
             # NOTE: create these indices later to improve performance?
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE UNIQUE INDEX IF NOT EXISTS nodes_n_index
                                          ON nodes (_n)
-            """)
-            conn.execute("CREATE INDEX IF NOT EXISTS edges_u_index ON edges (_u)")
-            conn.execute("CREATE INDEX IF NOT EXISTS edges_v_index ON edges (_v)")
-            conn.execute("""CREATE UNIQUE INDEX IF NOT EXISTS edges_uv_index
+            """
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS edges_u_index ON edges (_u)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS edges_v_index ON edges (_v)"
+            )
+            conn.execute(
+                """CREATE UNIQUE INDEX IF NOT EXISTS edges_uv_index
                                                            ON edges (_u, _v)
-            """)
+            """
+            )
 
     def add_edges(self, edges, batch_size=10_000, **attr):
         """Add edges to the network.
 
-        :param edges: an iterable of 2-tuples or 3-tuples representing (u, v) or
-                      (u, v, d) edges (as expected by NetworkX). Iterable can mix both
-                      edge types.
+        :param edges: an iterable of 2-tuples or 3-tuples representing (u, v)
+                      or (u, v, d) edges (as expected by NetworkX). Iterable
+                      can mix both edge types.
         :type edges: iterable
         :param batch_size: Size of batches to write downstream.
         :type batch_size: int
-        :param attr: Any default attributes to add to all edges. If any attributes
-                    conflict with edge data, edge data supercedes.
+        :param attr: Any default attributes to add to all edges. If any
+                     attributes conflict with edge data, edge data supercedes.
         :type attr: dict
 
         """
@@ -271,7 +301,8 @@ class GeoPackageNetwork:
                     u, v, edge_data = edge
                 except (TypeError, ValueError):
                     raise ValueError(
-                        "Edge must be 2-tuple of (u, v) or 3-tuple of (u, v, d)"
+                        "Edge must be 2-tuple of (u, v) or 3-tuple of "
+                        "(u, v, d)"
                     )
 
             d = OrderedDict()
@@ -286,21 +317,36 @@ class GeoPackageNetwork:
             edge_queue.append(d)
 
             if "geom" in d:
-                coords = []
-                node_queue.append(OrderedDict((
-                    ("_n", u),
-                    ("geom", {
-                        "type": "Point",
-                        "coordinates": d["geom"]["coordinates"][0]
-                    })
-                )))
-                node_queue.append(OrderedDict((
-                    ("_n", v),
-                    ("geom", {
-                        "type": "Point",
-                        "coordinates": d["geom"]["coordinates"][-1]
-                    })
-                )))
+                node_queue.append(
+                    OrderedDict(
+                        (
+                            ("_n", u),
+                            (
+                                "geom",
+                                {
+                                    "type": "Point",
+                                    "coordinates": d["geom"]["coordinates"][0],
+                                },
+                            ),
+                        )
+                    )
+                )
+                node_queue.append(
+                    OrderedDict(
+                        (
+                            ("_n", v),
+                            (
+                                "geom",
+                                {
+                                    "type": "Point",
+                                    "coordinates": d["geom"]["coordinates"][
+                                        -1
+                                    ],
+                                },
+                            ),
+                        )
+                    )
+                )
 
         self.edges.write_features(edge_queue, batch_size=batch_size)
         self.nodes.write_features(node_queue, batch_size=batch_size)

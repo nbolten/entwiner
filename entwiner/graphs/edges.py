@@ -1,6 +1,5 @@
 """Reusable, sqlite-backed edge containers"""
 from collections.abc import Mapping, MutableMapping
-from functools import partial
 
 from entwiner.exceptions import ImmutableGraphError, UninitializedEdgeError
 
@@ -45,7 +44,8 @@ class EdgeView(Mapping):
     (SQLite) database or initialized with kwargs (kwargs will be stored
     in-memory).
 
-    :param _network: GeoPackageNetwork used for interacting with underlying graph db.
+    :param _network: GeoPackageNetwork used for interacting with underlying
+                     graph db.
     :type _network: entwiner.GeoPackageNetwork
     :param _u: first node describing (u, v) edge.
     :type _u: str
@@ -86,15 +86,16 @@ class EdgeView(Mapping):
     @classmethod
     def from_db(cls, network, u, v):
         return cls(
-            _network=network, _u=u, _v=v, **self.network.edges.get_edge(self.u, self.v)
+            _network=network, _u=u, _v=v, **network.edges.get_edge(u, v)
         )
 
 
 class Edge(EdgeView, MutableMapping):
-    """Edge attributes that can be updated from the SQLite database or initialized with
-    kwargs (kwargs will be stored in-memory).
+    """Edge attributes that can be updated from the SQLite database or
+    initialized with kwargs (kwargs will be stored in-memory).
 
-    :param _network: GeoPackageNetwork used for interacting with underlying graph db.
+    :param _network: GeoPackageNetwork used for interacting with underlying
+                     graph db.
     :type _network: entwiner.GeoPackageNetwork
     :param _u: first node describing (u, v) edge.
     :type _u: str
