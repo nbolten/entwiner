@@ -1,6 +1,9 @@
 # editors
 *.swp
 
+# Test / coverage reports
+.coverage
+
 # python
 __pycache__
 venv
