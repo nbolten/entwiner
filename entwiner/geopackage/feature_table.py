@@ -315,7 +315,7 @@ class FeatureTable:
             # Add geometry column insert trigger
             conn.execute(
                 f"""
-                CREATE TRIGGER {rtree_table}_insert
+  CREATE TRIGGER IF NOT EXISTS {rtree_table}_insert
                AFTER INSERT ON {self.name}
                           WHEN (new.{self.geom_column} NOT NULL
                            AND NOT ST_IsEmpty(NEW.{self.geom_column}))
@@ -333,7 +333,7 @@ class FeatureTable:
             # Add geometry column (empty to non-empty) update trigger
             conn.execute(
                 f"""
-                CREATE TRIGGER {rtree_table}_update1
+  CREATE TRIGGER IF NOT EXISTS {rtree_table}_update1
                AFTER UPDATE OF {self.geom_column} ON {self.name}
                           WHEN OLD.{self.primary_key} = NEW.{self.primary_key}
                            AND (
@@ -354,7 +354,7 @@ class FeatureTable:
             # Add geometry column (non-empty to empty) update trigger
             conn.execute(
                 f"""
-                CREATE TRIGGER {rtree_table}_update2
+  CREATE TRIGGER IF NOT EXISTS {rtree_table}_update2
                AFTER UPDATE OF {self.geom_column} ON {self.name}
                           WHEN OLD.{self.primary_key} = NEW.{self.primary_key}
                            AND (
@@ -369,7 +369,7 @@ class FeatureTable:
             # Add various column with non-empty geometry update trigger
             conn.execute(
                 f"""
-                CREATE TRIGGER {rtree_table}_update3 AFTER UPDATE ON {self.name}
+  CREATE TRIGGER IF NOT EXISTS {rtree_table}_update3 AFTER UPDATE ON {self.name}
                           WHEN OLD.{self.primary_key} != NEW.{self.primary_key}
                            AND (
                                    NEW.{self.geom_column} NOTNULL
@@ -390,7 +390,7 @@ class FeatureTable:
             # Add various column with empty geometry update trigger
             conn.execute(
                 f"""
-                CREATE TRIGGER {rtree_table}_update4 AFTER UPDATE ON {self.name}
+CREATE TRIGGER IF NOT EXISTS {rtree_table}_update4 AFTER UPDATE ON {self.name}
                   WHEN OLD.{self.primary_key} != NEW.{self.primary_key}
                    AND (
                          NEW.{self.geom_column} ISNULL
@@ -405,7 +405,7 @@ class FeatureTable:
             # Add row deletion update trigger
             conn.execute(
                 f"""
-                CREATE TRIGGER {rtree_table}_delete AFTER DELETE ON {self.name}
+CREATE TRIGGER IF NOT EXISTS {rtree_table}_delete AFTER DELETE ON {self.name}
                   WHEN old.{self.geom_column} NOT NULL
                 BEGIN
                   DELETE FROM {rtree_table} WHERE id = OLD.{self.primary_key};
