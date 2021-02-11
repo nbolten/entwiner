@@ -151,7 +151,10 @@ class EdgeTable(FeatureTable):
     @staticmethod
     def _table_format(ebunch):
         for u, v, d in ebunch:
-            yield {"_u": u, "_v": v, **d}
+            ddict = {"_u": u, "_v": v, **d}
+            if "fid" in ddict:
+                ddict.pop("fid")
+            yield ddict
 
     def __iter__(self):
         for row in super().__iter__():

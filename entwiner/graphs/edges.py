@@ -24,7 +24,7 @@ class EdgeDict(MutableMapping):
 
     def __setitem__(self, key, value):
         if self.u is not None and self.v is not None:
-            self.network.edges.update(self.u, self.v, {key: value})
+            self.network.edges.update(((self.u, self.v, {key: value}),))
         else:
             raise UninitializedEdgeError(
                 "Attempted to set attrs on uninitialized edge."
