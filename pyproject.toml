@@ -3,7 +3,7 @@ name = "entwiner"
 version = "0.1.0"
 description = "Build, use, and share routable transportation graphs using common geospatial data."
 authors = ["Nick Bolten <nbolten@gmail.com>"]
-license = "MIT"
+license = "Apache-2.0"
 repository = "https://github.com/nbolten/entwiner"
 
 [tool.poetry.scripts]

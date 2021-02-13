@@ -21,7 +21,7 @@ setup(
     project_urls={"repository": "https://github.com/nbolten/entwiner"},
     author='Nick Bolten',
     author_email='nbolten@gmail.com',
-    license='MIT',
+    license='Apache-2.0',
     entry_points={"console_scripts": ["entwiner = entwiner.cli:entwiner"]},
     packages=['entwiner', 'entwiner.geopackage', 'entwiner.graphs'],
     package_dir={"": "."},
