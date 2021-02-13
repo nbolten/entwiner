@@ -25,7 +25,7 @@ setup(
     entry_points={"console_scripts": ["entwiner = entwiner.cli:entwiner"]},
     packages=['entwiner', 'entwiner.geopackage', 'entwiner.graphs'],
     package_dir={"": "."},
-    package_data={"entwiner": ["*.swp", "geopackage_extensions/*.swp"]},
+    package_data={"entwiner": ["geopackage_extensions/*.swp"], "entwiner.geopackage": ["*.swp"]},
     install_requires=['click==7.*,>=7.0.0', 'fiona==1.*,>=1.8.13', 'geomet==0.*,>=0.3.0', 'networkx==2.*,>=2.4.0', 'pyproj==2.*,>=2.4.2', 'shapely==1.*,>=1.6.4'],
     extras_require={"dev": ["black==19.*,>=19.10.0.b0", "dephell==0.*,>=0.8.3", "pre-commit==1.*,>=1.20.0", "pytest==5.*,>=5.2.0", "pytest-cov==2.*,>=2.10.1", "pytest-profiling==1.*,>=1.7.0"]},
 )

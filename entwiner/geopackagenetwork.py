@@ -41,18 +41,24 @@ class EdgeTable(FeatureTable):
         return (self._graph_format(row) for row in rows)
 
     def update(self, ebunch):
-        # TODO: optimize to do mass inserts - this one's slow!
-        for u, v, d in ebunch:
-            with self.gpkg.connect() as conn:
-                fids = conn.execute(
+        with self.gpkg.connect() as conn:
+            fids = []
+            # TODO: investigate whether this is a slow step
+            for u, v, d in ebunch:
+                # TODO: use different column format for this step? No need to
+                # get a dictionary as query output first.
+                fid = conn.execute(
                     f"SELECT fid FROM {self.name} WHERE _u = ? AND _v = ?",
                     (u, v),
-                )
-                fid = next(fids)["fid"]
-            # TODO: calling serialization function on every __setitem__ seems
-            #       unnecessary if it's not the geom column.
+                ).fetchone()["fid"]
+                fids.append(fid)
+
+        ddicts = []
+        for u, v, d in ebunch:
             ddict = self.serialize_row(next(self._table_format(((u, v, d),))))
-            super().update(fid, ddict)
+            ddicts.append(ddict)
+
+        super().update_batch(zip(fids, ddicts))
 
     def successor_nodes(self, n=None):
         with self.gpkg.connect() as conn:

@@ -1,3 +1,5 @@
+from collections import OrderedDict
+
 import geomet.wkb
 import pyproj
 from shapely.geometry import LineString, Point, shape
@@ -232,38 +234,33 @@ class FeatureTable:
 
         return (r for r, d in distance_rows if d < distance)
 
-    def update(self, primary_key, ddict):
-        columns = self._get_column_names()
-        values = []
-
-        keys = set(ddict.keys())
-        new_columns = keys.difference(columns)
-        if new_columns:
-            cols_to_add = []
-            for colname in new_columns:
-                cols_to_add.append(
-                    (colname, self._column_type(ddict[colname]))
-                )
-            self._add_feature_table_columns(cols_to_add)
-            columns = self._get_column_names()
-
-        keys = []
-
-        for c in columns:
-            if c in ddict:
-                keys.append(c)
-                values.append(ddict[c])
-
-        set_clauses = ", ".join([f"{k} = ?" for k in keys])
+    def update_batch(self, bunch):
+        bunch = list(bunch)
+        primary_keys, ddicts = zip(*bunch)
+        # TODO: wrap new columns + inserts in a single transaction?
+        self._add_new_columns(ddicts)
+        column_names = self._get_column_names()
         with self.gpkg.connect() as conn:
-            conn.execute(
-                f"""
-                UPDATE {self.name}
-                   SET {set_clauses}
-                 WHERE {self.primary_key} = ?
-            """,
-                (*values, primary_key),
-            )
+            for primary_key, ddict in bunch:
+                set_columns = []
+                set_values = []
+                for column_name in column_names:
+                    if column_name in ddict:
+                        set_columns.append(column_name)
+                        set_values.append(ddict[column_name])
+
+                set_clauses = ", ".join([f"{c} = ?" for c in set_columns])
+                conn.execute(
+                    f"""
+                    UPDATE {self.name}
+                       SET {set_clauses}
+                     WHERE {self.primary_key} = ?
+                """,
+                    (*set_values, primary_key),
+                )
+
+    def update(self, primary_key, ddict):
+        self.update_batch(((primary_key, ddict),))
 
     def add_rtree(self):
         with self.gpkg.connect() as conn:
@@ -542,6 +539,25 @@ class FeatureTable:
                     continue
                 column_names.append(column_name)
         return tuple(column_names)
+
+    def _check_for_new_columns(self, old_column_names, ddict):
+        keys = set(ddict.keys())
+        new_column_names = keys.difference(old_column_names)
+        new_columns = []
+        for name in new_column_names:
+            new_columns.append((name, self._column_type(ddict[name])))
+        return new_columns
+
+    def _add_new_columns(self, ddicts):
+        column_names = self._get_column_names()
+        columns_to_add = OrderedDict()
+        for ddict in ddicts:
+            for name, column_type in self._check_for_new_columns(
+                column_names, ddict
+            ):
+                if name not in columns_to_add:
+                    columns_to_add[name] = column_type
+        self._add_feature_table_columns(list(columns_to_add.items()))
 
     def _column_type(self, value):
         column_type = COL_TYPE_MAP.get(type(value), None)
