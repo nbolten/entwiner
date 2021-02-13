@@ -3,6 +3,7 @@
 
 # Test / coverage reports
 .coverage
+./prof
 
 # python
 __pycache__

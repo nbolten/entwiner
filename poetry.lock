@@ -447,6 +447,14 @@ six = "*"
 
 [[package]]
 category = "dev"
+description = "Generate a dot graph from the output of several profilers."
+name = "gprof2dot"
+optional = false
+python-versions = "*"
+version = "2019.11.30"
+
+[[package]]
+category = "dev"
 description = "File identification library for Python"
 name = "identify"
 optional = false
@@ -766,6 +774,22 @@ testing = ["fields", "hunter", "process-tests (2.0.2)", "six", "pytest-xdist", "
 
 [[package]]
 category = "dev"
+description = "Profiling plugin for py.test"
+name = "pytest-profiling"
+optional = false
+python-versions = "*"
+version = "1.7.0"
+
+[package.dependencies]
+gprof2dot = "*"
+pytest = "*"
+six = "*"
+
+[package.extras]
+tests = ["pytest-virtualenv"]
+
+[[package]]
+category = "dev"
 description = "YAML parser and emitter for Python"
 name = "pyyaml"
 optional = false
@@ -970,7 +994,7 @@ docs = ["sphinx", "jaraco.packaging (>=3.2)", "rst.linker (>=1.9)"]
 testing = ["pytest (>=3.5,<3.7.3 || >3.7.3)", "pytest-checkdocs (>=1.2.3)", "pytest-flake8", "pytest-cov", "jaraco.test (>=3.2.0)", "jaraco.itertools", "func-timeout", "pytest-black (>=0.3.7)", "pytest-mypy"]
 
 [metadata]
-content-hash = "72d953cfadac8eee9b5dc4b1679ae04b892e9da5685d0bd05be46122c3213733"
+content-hash = "4ffc0c6c53f28de915ab8fec7c2db7a0506d9d0f17c58ea158c727221b3739d4"
 lock-version = "1.0"
 python-versions = "^3.6"
 
@@ -1209,6 +1233,9 @@ geomet = [
     {file = "geomet-0.3.0-py3.7.egg", hash = "sha256:eb47ed9e22f3e4fa88333f5540c65aa0b6ec33ef6e9e1f2217b9b6df26e47461"},
     {file = "geomet-0.3.0.tar.gz", hash = "sha256:cb52411978ee01ff104ab48f108d7333b14423ae7a15a65fee25b7d29bda2e1b"},
 ]
+gprof2dot = [
+    {file = "gprof2dot-2019.11.30.tar.gz", hash = "sha256:b43fe04ebb3dfe181a612bbfc69e90555b8957022ad6a466f0308ed9c7f22e99"},
+]
 identify = [
     {file = "identify-1.5.13-py2.py3-none-any.whl", hash = "sha256:9dfb63a2e871b807e3ba62f029813552a24b5289504f5b071dea9b041aee9fe4"},
     {file = "identify-1.5.13.tar.gz", hash = "sha256:70b638cf4743f33042bebb3b51e25261a0a10e80f978739f17e7fd4837664a66"},
@@ -1393,6 +1420,12 @@ pytest = [
 pytest-cov = [
     {file = "pytest-cov-2.11.1.tar.gz", hash = "sha256:359952d9d39b9f822d9d29324483e7ba04a3a17dd7d05aa6beb7ea01e359e5f7"},
     {file = "pytest_cov-2.11.1-py2.py3-none-any.whl", hash = "sha256:bdb9fdb0b85a7cc825269a4c56b48ccaa5c7e365054b6038772c32ddcdc969da"},
+]
+pytest-profiling = [
+    {file = "pytest-profiling-1.7.0.tar.gz", hash = "sha256:93938f147662225d2b8bd5af89587b979652426a8a6ffd7e73ec4a23e24b7f29"},
+    {file = "pytest_profiling-1.7.0-py2.7.egg", hash = "sha256:3b255f9db36cb2dd7536a8e7e294c612c0be7f7850a7d30754878e4315d56600"},
+    {file = "pytest_profiling-1.7.0-py2.py3-none-any.whl", hash = "sha256:999cc9ac94f2e528e3f5d43465da277429984a1c237ae9818f8cfd0b06acb019"},
+    {file = "pytest_profiling-1.7.0-py3.6.egg", hash = "sha256:6bce4e2edc04409d2f3158c16750fab8074f62d404cc38eeb075dff7fcbb996c"},
 ]
 pyyaml = [
     {file = "PyYAML-5.4.1-cp27-cp27m-macosx_10_9_x86_64.whl", hash = "sha256:3b2b1824fe7112845700f815ff6a489360226a5609b96ec2190a45e62a9fc922"},
