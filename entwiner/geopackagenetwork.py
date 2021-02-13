@@ -232,8 +232,10 @@ class GeoPackageNetwork:
             with self.gpkg.connect() as conn:
                 edges_table_query = conn.execute(
                     """
-                    SELECT table_name FROM gpkg_contents WHERE table_name = 'edges'
-                """
+                    SELECT table_name
+                      FROM gpkg_contents
+                     WHERE table_name = 'edges'
+                    """
                 )
                 next(edges_table_query)
         except StopIteration:
@@ -243,8 +245,10 @@ class GeoPackageNetwork:
             with self.gpkg.connect() as conn:
                 nodes_table_query = conn.execute(
                     """
-                    SELECT table_name FROM gpkg_contents WHERE table_name = 'nodes'
-                """
+                    SELECT table_name
+                      FROM gpkg_contents
+                     WHERE table_name = 'nodes'
+                    """
                 )
                 next(nodes_table_query)
         except StopIteration:
