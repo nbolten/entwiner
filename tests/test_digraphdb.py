@@ -39,7 +39,8 @@ def test_update_speed(G_test_writable):
         d2.pop("fid")
         ebunch.append((u, v, d2))
     before = time.time()
-    G_test_writable.network.edges.update(ebunch)
+    G_test_writable.update_edges(ebunch)
+    # G_test_writable.network.edges.update(ebunch)
     after = time.time()
 
     assert (after - before) < MAXIMUM_UPDATE_TIME
