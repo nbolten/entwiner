@@ -73,8 +73,11 @@ class DiGraphDBView(nx.DiGraph):
         :rtype: tuple generator
 
         """
+        # FIXME: handle case where initializing with ddict data from query.
+        # If implemented here (adding **d to the edge factory arguments), it
+        # will always attempt to update the database on a per-read basis!
         return (
-            (u, v, self.edge_attr_dict_factory(_u=u, _v=v, **d))
+            (u, v, self.edge_attr_dict_factory(_u=u, _v=v))
             for u, v, d in self.network.edges
         )
 
