@@ -10,6 +10,13 @@ N_UPDATES = 1000
 MAXIMUM_UPDATE_TIME = 0.5
 
 
+def test_contains(G_test_writable):
+    assert TEST_NODE1 in G_test_writable
+    assert TEST_NODE2 in G_test_writable
+    assert TEST_NODE1 in G_test_writable._succ
+    assert TEST_NODE2 in G_test_writable._succ
+
+
 def test_update(G_test_writable):
     key = "weight"
     value = 5.4

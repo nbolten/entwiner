@@ -6,6 +6,13 @@ def test_size(G_test):
     assert G_test.size() == 8
 
 
+def test_contains(G_test):
+    assert TEST_NODE1 in G_test
+    assert TEST_NODE2 in G_test
+    assert TEST_NODE1 in G_test._succ
+    assert TEST_NODE2 in G_test._succ
+
+
 def test_iter_edges(G_test):
     iterator = G_test.iter_edges()
     # TODO: check output
