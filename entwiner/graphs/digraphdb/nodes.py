@@ -1,7 +1,7 @@
 """Reusable GeoPackage-backed Node container(s)."""
 from collections.abc import Mapping, MutableMapping
 
-from ..exceptions import NodeNotFound
+from entwiner.exceptions import NodeNotFound
 
 
 class NodesView(Mapping):

@@ -5,8 +5,8 @@ import uuid
 
 import networkx as nx
 
-from ..geopackagenetwork import GeoPackageNetwork
-from ..exceptions import UnderspecifiedGraphError
+from entwiner.geopackagenetwork import GeoPackageNetwork
+from entwiner.exceptions import UnderspecifiedGraphError
 from .edges import Edge, EdgeView
 from .nodes import Nodes, NodesView
 from .outer_adjlists import OuterSuccessors
