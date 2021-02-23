@@ -2,7 +2,11 @@
 from setuptools import setup
 
 packages = \
-['entwiner', 'entwiner.geopackage', 'entwiner.graphs']
+['entwiner',
+ 'entwiner.geopackage',
+ 'entwiner.geopackagenetwork',
+ 'entwiner.graphs',
+ 'entwiner.graphs.digraphdb']
 
 package_data = \
 {'': ['*']}
