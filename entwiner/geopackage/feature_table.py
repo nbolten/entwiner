@@ -443,37 +443,20 @@ class FeatureTable:
             )
 
     def drop_rtree(self):
+        rtree_table_name = f"rtree_{self.name}_{self.geom_column}"
         with self.gpkg.connect() as conn:
             # Drop rtree tables
-            conn.execute(f"DROP TABLE rtree_{self.name}_{self.geom_column}")
-            conn.execute(
-                f"DROP TABLE rtree_{self.name}_{self.geom_column}_node"
-            )
-            conn.execute(
-                f"DROP TABLE rtree_{self.name}_{self.geom_column}_rowid"
-            )
-            conn.execute(
-                f"DROP TABLE rtree_{self.name}_{self.geom_column}_parent"
-            )
+            conn.execute(f"DROP TABLE IF EXISTS {rtree_table_name}")
+            conn.execute(f"DROP TABLE IF EXISTS {rtree_table_name}_node")
+            conn.execute(f"DROP TABLE IF EXISTS {rtree_table_name}_rowid")
+            conn.execute(f"DROP TABLE IF EXISTS {rtree_table_name}_parent")
             # Drop rtree indices
-            conn.execut(
-                f"DROP INDEX rtree_{self.name}_{self.geom_columns}_insert"
-            )
-            conn.execut(
-                f"DROP INDEX rtree_{self.name}_{self.geom_columns}_update1"
-            )
-            conn.execut(
-                f"DROP INDEX rtree_{self.name}_{self.geom_columns}_update2"
-            )
-            conn.execut(
-                f"DROP INDEX rtree_{self.name}_{self.geom_columns}_update3"
-            )
-            conn.execut(
-                f"DROP INDEX rtree_{self.name}_{self.geom_columns}_update4"
-            )
-            conn.execut(
-                f"DROP INDEX rtree_{self.name}_{self.geom_columns}_delete"
-            )
+            conn.execute(f"DROP TRIGGER IF EXISTS {rtree_table_name}_insert")
+            conn.execute(f"DROP TRIGGER IF EXISTS {rtree_table_name}_update1")
+            conn.execute(f"DROP TRIGGER IF EXISTS {rtree_table_name}_update2")
+            conn.execute(f"DROP TRIGGER IF EXISTS {rtree_table_name}_update3")
+            conn.execute(f"DROP TRIGGER IF EXISTS {rtree_table_name}_update4")
+            conn.execute(f"DROP TRIGGER IF EXISTS {rtree_table_name}_delete")
 
     def write_features(self, features, batch_size=10_000, counter=None):
         queue = []
