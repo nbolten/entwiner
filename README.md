@@ -1,5 +1,10 @@
-# Note: this is under very active and early development. Don't use for production
-# applications yet!
+# Entwiner is deprecated
+
+Entwiner has been merged into the
+[`unweaver`](https://github.com/nbolten/unweaver) repository due to the high
+levels of coupling between creating a routable graph and user-defined functions
+for interpreting the graph. Its functionality is fully replaced by the
+`unweaver build` command.
 
 # Entwiner
 
